@@ -145,7 +145,7 @@ class _BarSpectrumPainter extends CustomPainter {
       if (magnitude > 0.05) {
         final glowPaint = Paint()
           ..color = glowColor
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)
           ..style = PaintingStyle.fill;
 
         final glowRect = RRect.fromRectAndRadius(

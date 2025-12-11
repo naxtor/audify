@@ -10,11 +10,12 @@ Pod::Spec.new do |s|
 High-performance audio visualizer package for Flutter focusing on trap/dubstep style visualizations. 
 Features circular spectrum, bar spectrum, and waveform displays with real-time FFT processing.
                        DESC
-  s.homepage         = 'http://example.com'
+  s.homepage         = 'https://pub.dev/packages/audify'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'Your Company' => 'email@example.com' }
+  s.author           = { 'Nabil Faris' => 'hello@nabilfaris.id' }
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'audify/Sources/audify/**/*.swift'
+  s.resource_bundles = {'audify_privacy' => ['audify/Sources/audify/PrivacyInfo.xcprivacy']}
   s.dependency 'Flutter'
   s.platform = :ios, '12.0'
 

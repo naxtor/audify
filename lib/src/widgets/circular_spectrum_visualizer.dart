@@ -198,7 +198,7 @@ class _CircularSpectrumPainter extends CustomPainter {
     // Draw glow effect
     final glowPaint = Paint()
       ..color = glowColor
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = barWidth + 4;
 
