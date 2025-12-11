@@ -2,11 +2,11 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
-import '../audio_visualizer_controller.dart';
+import '../audify_controller.dart';
 import '../frequency_data.dart';
 
 class CircularSpectrumVisualizer extends StatefulWidget {
-  final AudioVisualizerController controller;
+  final AudifyController controller;
   final Color color;
   final Color? glowColor;
   final double barWidth;

@@ -1,13 +1,12 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_audio_visualizer/src/flutter_audio_visualizer_method_channel.dart';
+import 'package:audify/src/audify_method_channel.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  MethodChannelFlutterAudioVisualizer platform =
-      MethodChannelFlutterAudioVisualizer();
-  const MethodChannel channel = MethodChannel('flutter_audio_visualizer');
+  MethodChannelAudify platform = MethodChannelAudify();
+  const MethodChannel channel = MethodChannel('audify');
 
   setUp(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

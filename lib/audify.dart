@@ -1,10 +1,10 @@
-/// Flutter Audio Visualizer Plugin
+/// Audify - Flutter Audio Visualizer Plugin
 ///
 /// A high-performance audio visualizer for Flutter with trap/dubstep style visualizations.
 ///
 /// ## Main Interface
 ///
-/// The primary app-facing interface is [AudioVisualizerController]. Use this to:
+/// The primary app-facing interface is [AudifyController]. Use this to:
 /// - Initialize audio capture
 /// - Start/stop visualization
 /// - Access FFT, waveform, and frequency band data streams
@@ -12,7 +12,7 @@
 /// ## Example Usage
 ///
 /// ```dart
-/// final controller = AudioVisualizerController();
+/// final controller = AudifyController();
 ///
 /// // Initialize with system audio
 /// await controller.initialize(audioSessionId: 0);
@@ -43,7 +43,7 @@
 library;
 
 // Export the main app-facing controller (primary interface)
-export 'src/audio_visualizer_controller.dart';
+export 'src/audify_controller.dart';
 
 // Export data models
 export 'src/frequency_data.dart';

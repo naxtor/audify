@@ -1,11 +1,11 @@
 {
-    "name": "flutter_audio_visualizer_example",
-    "short_name": "flutter_audio_visualizer_example",
+    "name": "audify_example",
+    "short_name": "audify_example",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "Demonstrates how to use the flutter_audio_visualizer plugin.",
+    "description": "Demonstrates how to use the audify plugin.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

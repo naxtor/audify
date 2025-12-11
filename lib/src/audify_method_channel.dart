@@ -1,14 +1,13 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
-import 'flutter_audio_visualizer_platform_interface.dart';
+import 'audify_platform_interface.dart';
 
-/// An implementation of [FlutterAudioVisualizerPlatform] that uses method channels.
-class MethodChannelFlutterAudioVisualizer
-    extends FlutterAudioVisualizerPlatform {
+/// An implementation of [AudifyPlatform] that uses method channels.
+class MethodChannelAudify extends AudifyPlatform {
   /// The method channel used to interact with the native platform.
   @visibleForTesting
-  final methodChannel = const MethodChannel('flutter_audio_visualizer');
+  final methodChannel = const MethodChannel('audify');
 
   @override
   Future<bool> initialize({required int audioSessionId}) async {

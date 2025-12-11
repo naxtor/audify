@@ -1,6 +1,6 @@
-# flutter_audio_visualizer_example
+# audify_example
 
-Demonstrates how to use the flutter_audio_visualizer plugin.
+Demonstrates how to use the audify plugin.
 
 ## Getting Started
 

@@ -1,11 +1,11 @@
 // lib/src/widgets/bar_spectrum_visualizer.dart
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../audio_visualizer_controller.dart';
+import '../audify_controller.dart';
 import '../frequency_data.dart';
 
 class BarSpectrumVisualizer extends StatefulWidget {
-  final AudioVisualizerController controller;
+  final AudifyController controller;
   final Color color;
   final Color? glowColor;
   final Gradient? gradient;

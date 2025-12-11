@@ -1,9 +1,9 @@
 #
 # To learn more about a Podspec see http://guides.cocoapods.org/syntax/podspec.html.
-# Run `pod lib lint flutter_audio_visualizer.podspec` to validate before publishing.
+# Run `pod lib lint audify.podspec` to validate before publishing.
 #
 Pod::Spec.new do |s|
-  s.name             = 'flutter_audio_visualizer'
+  s.name             = 'audify'
   s.version          = '0.0.1'
   s.summary          = 'High-performance audio visualizer for Flutter with trap/dubstep style visualizations.'
   s.description      = <<-DESC

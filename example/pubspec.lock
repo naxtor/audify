@@ -9,6 +9,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.13.0"
+  audify:
+    dependency: "direct main"
+    description:
+      path: ".."
+      relative: true
+    source: path
+    version: "1.0.0"
   audioplayers:
     dependency: "direct main"
     description:
@@ -150,13 +157,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_audio_visualizer:
-    dependency: "direct main"
-    description:
-      path: ".."
-      relative: true
-    source: path
-    version: "1.0.0"
   flutter_driver:
     dependency: transitive
     description: flutter

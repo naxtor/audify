@@ -1,25 +1,24 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-import 'flutter_audio_visualizer_method_channel.dart';
+import 'audify_method_channel.dart';
 
-abstract class FlutterAudioVisualizerPlatform extends PlatformInterface {
-  /// Constructs a FlutterAudioVisualizerPlatform.
-  FlutterAudioVisualizerPlatform() : super(token: _token);
+abstract class AudifyPlatform extends PlatformInterface {
+  /// Constructs a AudifyPlatform.
+  AudifyPlatform() : super(token: _token);
 
   static final Object _token = Object();
 
-  static FlutterAudioVisualizerPlatform _instance =
-      MethodChannelFlutterAudioVisualizer();
+  static AudifyPlatform _instance = MethodChannelAudify();
 
-  /// The default instance of [FlutterAudioVisualizerPlatform] to use.
+  /// The default instance of [AudifyPlatform] to use.
   ///
-  /// Defaults to [MethodChannelFlutterAudioVisualizer].
-  static FlutterAudioVisualizerPlatform get instance => _instance;
+  /// Defaults to [MethodChannelAudify].
+  static AudifyPlatform get instance => _instance;
 
   /// Platform-specific implementations should set this with their own
-  /// platform-specific class that extends [FlutterAudioVisualizerPlatform] when
+  /// platform-specific class that extends [AudifyPlatform] when
   /// they register themselves.
-  static set instance(FlutterAudioVisualizerPlatform instance) {
+  static set instance(AudifyPlatform instance) {
     PlatformInterface.verifyToken(instance, _token);
     _instance = instance;
   }

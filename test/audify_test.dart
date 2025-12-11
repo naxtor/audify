@@ -1,11 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_audio_visualizer/src/flutter_audio_visualizer_platform_interface.dart';
-import 'package:flutter_audio_visualizer/src/flutter_audio_visualizer_method_channel.dart';
+import 'package:audify/src/audify_platform_interface.dart';
+import 'package:audify/src/audify_method_channel.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
-class MockFlutterAudioVisualizerPlatform
+class MockAudifyPlatform
     with MockPlatformInterfaceMixin
-    implements FlutterAudioVisualizerPlatform {
+    implements AudifyPlatform {
   @override
   Future<bool> initialize({required int audioSessionId}) => Future.value(true);
 
@@ -23,19 +23,18 @@ class MockFlutterAudioVisualizerPlatform
 }
 
 void main() {
-  final FlutterAudioVisualizerPlatform initialPlatform =
-      FlutterAudioVisualizerPlatform.instance;
+  final AudifyPlatform initialPlatform = AudifyPlatform.instance;
 
-  test('$MethodChannelFlutterAudioVisualizer is the default instance', () {
+  test('$MethodChannelAudify is the default instance', () {
     expect(
       initialPlatform,
-      isInstanceOf<MethodChannelFlutterAudioVisualizer>(),
+      isInstanceOf<MethodChannelAudify>(),
     );
   });
 
   test('initialize', () async {
-    final mockPlatform = MockFlutterAudioVisualizerPlatform();
-    FlutterAudioVisualizerPlatform.instance = mockPlatform;
+    final mockPlatform = MockAudifyPlatform();
+    AudifyPlatform.instance = mockPlatform;
 
     expect(await mockPlatform.initialize(audioSessionId: 0), true);
   });

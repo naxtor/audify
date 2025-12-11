@@ -1,8 +1,8 @@
-name: flutter_audio_visualizer
+name: audify
 description: "High-performance audio visualizer for Flutter with trap/dubstep style visualizations. Features circular spectrum and bar spectrum displays with album artwork support. Supports Android and iOS with native FFT processing."
 version: 1.0.0
-homepage: https://github.com/naxtor/flutter_audio_visualizer
-repository: https://github.com/naxtor/flutter_audio_visualizer
+homepage: https://github.com/naxtor/audify
+repository: https://github.com/naxtor/audify
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -36,10 +36,10 @@ flutter:
   plugin:
     platforms:
       android:
-        package: id.nabilfaris.flutter_audio_visualizer
-        pluginClass: FlutterAudioVisualizerPlugin
+        package: id.nabilfaris.audify
+        pluginClass: AudifyPlugin
       ios:
-        pluginClass: FlutterAudioVisualizerPlugin
+        pluginClass: AudifyPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

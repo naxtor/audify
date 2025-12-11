@@ -1,4 +1,4 @@
-package id.nabilfaris.flutter_audio_visualizer
+package id.nabilfaris.audify
 
 import android.media.audiofx.Visualizer
 import android.os.Handler
@@ -11,7 +11,7 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
-class FlutterAudioVisualizerPlugin: FlutterPlugin, MethodCallHandler {
+class AudifyPlugin: FlutterPlugin, MethodCallHandler {
     private lateinit var methodChannel: MethodChannel
     private lateinit var fftEventChannel: EventChannel
     private lateinit var waveformEventChannel: EventChannel
@@ -21,14 +21,14 @@ class FlutterAudioVisualizerPlugin: FlutterPlugin, MethodCallHandler {
     private var waveformStreamHandler: AudioStreamHandler? = null
     
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
-        methodChannel = MethodChannel(flutterPluginBinding.binaryMessenger, "flutter_audio_visualizer")
+        methodChannel = MethodChannel(flutterPluginBinding.binaryMessenger, "audify")
         methodChannel.setMethodCallHandler(this)
         
-        fftEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "flutter_audio_visualizer/fft")
+        fftEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "audify/fft")
         fftStreamHandler = AudioStreamHandler()
         fftEventChannel.setStreamHandler(fftStreamHandler)
         
-        waveformEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "flutter_audio_visualizer/waveform")
+        waveformEventChannel = EventChannel(flutterPluginBinding.binaryMessenger, "audify/waveform")
         waveformStreamHandler = AudioStreamHandler()
         waveformEventChannel.setStreamHandler(waveformStreamHandler)
     }

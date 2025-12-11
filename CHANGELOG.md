@@ -24,7 +24,7 @@
   - Smooth 60 FPS rendering
   - Configurable smoothing and capture size
 * **API:**
-  - Simple `AudioVisualizerController` interface
+  - Simple `AudifyController` interface
   - Stream-based data delivery
   - Comprehensive frequency band extraction
 * Production-ready with zero flutter analyze warnings

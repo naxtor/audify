@@ -1,5 +1,5 @@
-group = "id.nabilfaris.flutter_audio_visualizer"
-version = "1.0-SNAPSHOT"
+group = "id.nabilfaris.audify"
+version = "1.0.0-SNAPSHOT"
 
 buildscript {
     ext.kotlin_version = "2.2.20"
@@ -25,7 +25,7 @@ apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
 android {
-    namespace = "id.nabilfaris.flutter_audio_visualizer"
+    namespace = "id.nabilfaris.audify"
 
     compileSdk = 36
 

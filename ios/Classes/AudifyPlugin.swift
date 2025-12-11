@@ -3,7 +3,7 @@ import UIKit
 import AVFoundation
 import Accelerate
 
-public class FlutterAudioVisualizerPlugin: NSObject, FlutterPlugin {
+public class AudifyPlugin: NSObject, FlutterPlugin {
     private var audioEngine: AVAudioEngine?
     private var fftEventChannel: FlutterEventChannel?
     private var waveformEventChannel: FlutterEventChannel?
@@ -19,15 +19,15 @@ public class FlutterAudioVisualizerPlugin: NSObject, FlutterPlugin {
     
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(
-            name: "flutter_audio_visualizer",
+            name: "audify",
             binaryMessenger: registrar.messenger()
         )
-        let instance = FlutterAudioVisualizerPlugin()
+        let instance = AudifyPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
         
         // Setup FFT event channel
         instance.fftEventChannel = FlutterEventChannel(
-            name: "flutter_audio_visualizer/fft",
+            name: "audify/fft",
             binaryMessenger: registrar.messenger()
         )
         instance.fftStreamHandler = AudioStreamHandler()
@@ -35,7 +35,7 @@ public class FlutterAudioVisualizerPlugin: NSObject, FlutterPlugin {
         
         // Setup waveform event channel
         instance.waveformEventChannel = FlutterEventChannel(
-            name: "flutter_audio_visualizer/waveform",
+            name: "audify/waveform",
             binaryMessenger: registrar.messenger()
         )
         instance.waveformStreamHandler = AudioStreamHandler()

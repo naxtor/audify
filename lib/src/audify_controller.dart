@@ -6,27 +6,27 @@ import 'frequency_data.dart';
 
 /// Main controller for audio visualization.
 ///
-/// This is the primary app-facing interface for the flutter_audio_visualizer plugin.
+/// This is the primary app-facing interface for the audify plugin.
 /// Use this controller to initialize, start, stop, and manage audio visualization.
 ///
 /// Example:
 /// ```dart
-/// final controller = AudioVisualizerController();
+/// final controller = AudifyController();
 /// await controller.initialize(audioSessionId: 0);
 /// await controller.startCapture();
 ///
 /// // Use with widgets
 /// CircularSpectrumVisualizer(controller: controller)
 /// ```
-class AudioVisualizerController {
+class AudifyController {
   static const MethodChannel _methodChannel = MethodChannel(
-    'flutter_audio_visualizer',
+    'audify',
   );
   static const EventChannel _fftEventChannel = EventChannel(
-    'flutter_audio_visualizer/fft',
+    'audify/fft',
   );
   static const EventChannel _waveformEventChannel = EventChannel(
-    'flutter_audio_visualizer/waveform',
+    'audify/waveform',
   );
 
   StreamSubscription<dynamic>? _fftSubscription;

@@ -1,4 +1,4 @@
-package id.nabilfaris.flutter_audio_visualizer_example
+package id.nabilfaris.audify_example
 
 import io.flutter.embedding.android.FlutterActivity
 

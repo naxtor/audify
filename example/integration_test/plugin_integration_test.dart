@@ -9,15 +9,15 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 
-import 'package:flutter_audio_visualizer/flutter_audio_visualizer.dart';
+import 'package:audify/audify.dart';
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('AudioVisualizerController initialization test', (
+  testWidgets('AudifyController initialization test', (
     WidgetTester tester,
   ) async {
-    final controller = AudioVisualizerController();
+    final controller = AudifyController();
 
     // Test initialization
     await controller.initialize(audioSessionId: 0, captureSize: 2048);

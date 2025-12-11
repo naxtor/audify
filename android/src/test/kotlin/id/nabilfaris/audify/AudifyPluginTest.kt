@@ -1,4 +1,4 @@
-package id.nabilfaris.flutter_audio_visualizer
+package id.nabilfaris.audify
 
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -13,15 +13,15 @@ import kotlin.test.Test
  * you can run them directly from IDEs that support JUnit such as Android Studio.
  */
 
-internal class FlutterAudioVisualizerPluginTest {
+internal class AudifyPluginTest {
     @Test
     fun onMethodCall_getPlatformVersion_returnsExpectedValue() {
-        val plugin = FlutterAudioVisualizerPlugin()
+        val plugin = AudifyPlugin()
 
         val call = MethodCall("getPlatformVersion", null)
         val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
         plugin.onMethodCall(call, mockResult)
 
-        Mockito.verify(mockResult).success("Android " + android.os.Build.VERSION.RELEASE)
+        Mockito.verify(mockResult).notImplemented()
     }
 }

@@ -1,14 +1,14 @@
-# Flutter Audio Visualizer
+# Audify
 
 A high-performance audio visualizer plugin for Flutter with beautiful trap/dubstep style visualizations including circular spectrum and bar spectrum displays.
 
-[![Pub Version](https://img.shields.io/badge/pub-v1.0.0-blue)](https://pub.dev/packages/flutter_audio_visualizer)
+[![Pub Version](https://img.shields.io/badge/pub-v1.0.0-blue)](https://pub.dev/packages/audify)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-![circular spectrum with image demo](https://raw.githubusercontent.com/naxtor/flutter_audio_visualizer/main/assets/gifs/ezgif-2297ce4266af7211.gif)
-![Visucircular spectrumalizer without image demo](https://raw.githubusercontent.com/naxtor/flutter_audio_visualizer/main/assets/gifs/ezgif-272681ea22f9a663.gif)
-![bar spectrum demo](https://raw.githubusercontent.com/naxtor/flutter_audio_visualizer/main/assets/gifs/ezgif-293f4f7c2358c78d.gif)
-![bar spectrum mirror demo](https://raw.githubusercontent.com/naxtor/flutter_audio_visualizer/main/assets/gifs/ezgif-2fb70ce8d9e595d9.gif)
+![circular spectrum with image demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-2297ce4266af7211.gif)
+![Visucircular spectrumalizer without image demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-272681ea22f9a663.gif)
+![bar spectrum demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-293f4f7c2358c78d.gif)
+![bar spectrum mirror demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-2fb70ce8d9e595d9.gif)
 
 ## Key Highlights
 
@@ -46,7 +46,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  flutter_audio_visualizer: ^1.0.0
+  audify: ^1.0.0
   permission_handler: ^11.0.1  # For runtime permissions
 ```
 
@@ -95,9 +95,9 @@ if (!status.isGranted) {
 ### 2. Create and Initialize Controller
 
 ```dart
-import 'package:flutter_audio_visualizer/flutter_audio_visualizer.dart';
+import 'package:audify/audify.dart';
 
-final controller = AudioVisualizerController();
+final controller = AudifyController();
 
 // Initialize with system audio (audioSessionId: 0 captures all audio)
 await controller.initialize(audioSessionId: 0);
@@ -133,7 +133,7 @@ void dispose() {
 
 ```dart
 import 'package:flutter/material.dart';
-import 'package:flutter_audio_visualizer/flutter_audio_visualizer.dart';
+import 'package:audify/audify.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 class VisualizerPage extends StatefulWidget {
@@ -142,13 +142,13 @@ class VisualizerPage extends StatefulWidget {
 }
 
 class _VisualizerPageState extends State<VisualizerPage> {
-  late AudioVisualizerController _controller;
+  late AudifyController _controller;
   bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = AudioVisualizerController();
+    _controller = AudifyController();
     _initialize();
   }
 
@@ -215,7 +215,7 @@ SizedBox(
 ```
 
 **Properties:**
-- `controller` (required): `AudioVisualizerController` - Controls the audio data stream
+- `controller` (required): `AudifyController` - Controls the audio data stream
 - `color`: `Color` - Primary color of the visualizer bars (default: `Colors.purpleAccent`)
 - `glowColor`: `Color?` - Glow effect color (default: primary color with 50% opacity)
 - `barCount`: `int` - Number of bars in the circle (default: 40)
@@ -252,7 +252,7 @@ SizedBox(
 ```
 
 **Properties:**
-- `controller` (required): `AudioVisualizerController` - Controls the audio data stream
+- `controller` (required): `AudifyController` - Controls the audio data stream
 - `color`: `Color` - Primary color of the bars (default: `Colors.purpleAccent`)
 - `glowColor`: `Color?` - Glow effect color (default: primary color with 50% opacity)
 - `gradient`: `Gradient?` - Optional gradient to apply to bars (overrides color)
@@ -315,7 +315,7 @@ The plugin extracts 7 frequency bands optimized for music visualization:
 
 ## API Reference
 
-### AudioVisualizerController
+### AudifyController
 
 #### Methods
 
@@ -452,7 +452,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Support
 
-If you find this package helpful, please give it a ⭐ on [GitHub](https://github.com/naxtor/flutter_audio_visualizer)!
+If you find this package helpful, please give it a ⭐ on [GitHub](https://github.com/naxtor/audify)!
 
-For bugs or feature requests, please [open an issue](https://github.com/naxtor/flutter_audio_visualizer/issues).
+For bugs or feature requests, please [open an issue](https://github.com/naxtor/audify/issues).
 

@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_audio_visualizer/flutter_audio_visualizer.dart';
+import 'package:audify/audify.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:audioplayers/audioplayers.dart';
 
@@ -14,7 +14,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Audio Visualizer',
+      title: 'Audify',
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
         primaryColor: const Color(0xFF6C63FF),
@@ -42,20 +42,20 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AudioVisualizerDemo(),
+      home: const AudifyDemo(),
     );
   }
 }
 
-class AudioVisualizerDemo extends StatefulWidget {
-  const AudioVisualizerDemo({super.key});
+class AudifyDemo extends StatefulWidget {
+  const AudifyDemo({super.key});
 
   @override
-  State<AudioVisualizerDemo> createState() => _AudioVisualizerDemoState();
+  State<AudifyDemo> createState() => _AudifyDemoState();
 }
 
-class _AudioVisualizerDemoState extends State<AudioVisualizerDemo> {
-  late AudioVisualizerController _controller;
+class _AudifyDemoState extends State<AudifyDemo> {
+  late AudifyController _controller;
   late AudioPlayer _audioPlayer;
   bool _isInitialized = false;
   bool _isCapturing = false;
@@ -68,7 +68,7 @@ class _AudioVisualizerDemoState extends State<AudioVisualizerDemo> {
   @override
   void initState() {
     super.initState();
-    _controller = AudioVisualizerController();
+    _controller = AudifyController();
     _audioPlayer = AudioPlayer();
     _setupAudioPlayer();
     _initializeVisualizer();
@@ -339,7 +339,7 @@ class _AudioVisualizerDemoState extends State<AudioVisualizerDemo> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Audio Visualizer',
+                'Audify Demo',
                 style: TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
