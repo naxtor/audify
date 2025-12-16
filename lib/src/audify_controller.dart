@@ -1,8 +1,9 @@
 // lib/src/audio_visualizer_controller.dart
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'frequency_data.dart';
+import 'audify_platform.dart';
 
 /// Main controller for audio visualization.
 ///
@@ -19,18 +20,10 @@ import 'frequency_data.dart';
 /// CircularSpectrumVisualizer(controller: controller)
 /// ```
 class AudifyController {
-  static const MethodChannel _methodChannel = MethodChannel(
-    'audify',
-  );
-  static const EventChannel _fftEventChannel = EventChannel(
-    'audify/fft',
-  );
-  static const EventChannel _waveformEventChannel = EventChannel(
-    'audify/waveform',
-  );
+  final AudifyPlatform _platform;
 
-  StreamSubscription<dynamic>? _fftSubscription;
-  StreamSubscription<dynamic>? _waveformSubscription;
+  StreamSubscription<List<int>>? _fftSubscription;
+  StreamSubscription<List<int>>? _waveformSubscription;
 
   final StreamController<List<double>> _fftStreamController =
       StreamController<List<double>>.broadcast();
@@ -42,6 +35,20 @@ class AudifyController {
   bool _isInitialized = false;
   bool _isCapturing = false;
   int _captureSize = 2048;
+
+  DateTime? _lastProcessTime;
+
+  /// Minimum time between FFT processing calls (in milliseconds).
+  /// Default targets ~60 FPS -> 16ms.
+  final int _minProcessIntervalMs;
+
+  /// Create an `AudifyController`.
+  ///
+  /// Provide a custom `AudifyPlatform` for testing; otherwise the default
+  /// `MethodChannelAudify` is used.
+  AudifyController({AudifyPlatform? platform, int minProcessIntervalMs = 16})
+      : _platform = platform ?? MethodChannelAudify(),
+        _minProcessIntervalMs = minProcessIntervalMs;
 
   /// Stream of raw FFT magnitude data (0.0 - 1.0)
   Stream<List<double>> get fftStream => _fftStreamController.stream;
@@ -65,12 +72,8 @@ class AudifyController {
   }) async {
     try {
       _captureSize = captureSize;
-
       // Pass captureSize during initialization (required for API 36+)
-      await _methodChannel.invokeMethod('initialize', {
-        'audioSessionId': audioSessionId,
-        'captureSize': _captureSize,
-      });
+      await _platform.initialize(audioSessionId, _captureSize);
 
       _isInitialized = true;
     } catch (e) {
@@ -85,14 +88,10 @@ class AudifyController {
     }
 
     try {
-      await _methodChannel.invokeMethod('startCapture');
+      await _platform.startCapture();
 
-      _fftSubscription = _fftEventChannel.receiveBroadcastStream().listen(
-        (data) {
-          if (data is List) {
-            _processFftData(data.cast<int>());
-          }
-        },
+      _fftSubscription = _platform.fftStream().listen(
+        (data) => _processFftData(data),
         onError: (error) {
           if (kDebugMode) {
             print('FFT stream error: $error');
@@ -100,13 +99,8 @@ class AudifyController {
         },
       );
 
-      _waveformSubscription =
-          _waveformEventChannel.receiveBroadcastStream().listen(
-        (data) {
-          if (data is List) {
-            _processWaveformData(data.cast<int>());
-          }
-        },
+      _waveformSubscription = _platform.waveformStream().listen(
+        (data) => _processWaveformData(data),
         onError: (error) {
           if (kDebugMode) {
             print('Waveform stream error: $error');
@@ -123,9 +117,14 @@ class AudifyController {
   /// Stop capturing audio data
   Future<void> stopCapture() async {
     try {
-      await _methodChannel.invokeMethod('stopCapture');
+      await _platform.stopCapture();
+
       await _fftSubscription?.cancel();
+      _fftSubscription = null;
+
       await _waveformSubscription?.cancel();
+      _waveformSubscription = null;
+
       _isCapturing = false;
     } catch (e) {
       throw Exception('Failed to stop capture: $e');
@@ -134,8 +133,16 @@ class AudifyController {
 
   /// Release resources
   Future<void> dispose() async {
-    await stopCapture();
-    await _methodChannel.invokeMethod('release');
+    try {
+      if (_isCapturing) {
+        await stopCapture();
+      }
+    } catch (_) {}
+
+    try {
+      await _platform.release();
+    } catch (_) {}
+
     await _fftStreamController.close();
     await _waveformStreamController.close();
     await _frequencyDataStreamController.close();
@@ -144,46 +151,51 @@ class AudifyController {
 
   void _processFftData(List<int> fftData) {
     try {
-      // Convert Android FFT format to magnitude spectrum
+      // Throttle processing to _minProcessIntervalMs
+      final now = DateTime.now();
+      if (_lastProcessTime != null) {
+        final diff = now.difference(_lastProcessTime!).inMilliseconds;
+        if (diff < _minProcessIntervalMs) return;
+      }
+      _lastProcessTime = now;
+
+      // Convert Android Visualizer FFT format (bytes) into magnitudes.
+      // Visualizer returns bytes representing signed 8-bit values.
+      final bytes = fftData;
+      final halfSize = bytes.length ~/ 2;
       final magnitudes = <double>[];
 
-      // Android Visualizer FFT format: [real0, real1, ..., realN/2, imag1, ..., imagN/2-1]
-      final halfSize = fftData.length ~/ 2;
-
       for (int i = 0; i < halfSize; i++) {
-        double real = 0.0;
-        double imag = 0.0;
+        int realByte = bytes[i];
+        // Android FFT format: imaginary parts start at index n/2+1 for frequency bin 1
+        // So for bin i (where i > 0 and i < n/2), imaginary is at halfSize + i - 1
+        int imagByte =
+            (i == 0 || i == halfSize - 1) ? 0 : bytes[halfSize + i - 1];
 
-        if (i == 0) {
-          // DC component
-          real = fftData[0].toDouble();
-          imag = 0.0;
-        } else if (i == halfSize - 1) {
-          // Nyquist frequency
-          real = fftData[halfSize].toDouble();
-          imag = 0.0;
-        } else {
-          // Regular bins
-          real = fftData[i].toDouble();
-          imag = fftData[halfSize + i].toDouble();
-        }
+        // Convert to signed 8-bit (-128..127)
+        int real = realByte & 0xFF;
+        if (real >= 128) real -= 256;
 
-        // Calculate magnitude and normalize
-        final magnitude = (real * real + imag * imag).abs();
-        final normalizedMagnitude =
-            magnitude / 32768.0; // Normalize from byte range
+        int imag = imagByte & 0xFF;
+        if (imag >= 128) imag -= 256;
 
-        // Apply logarithmic scaling for better visualization
-        final logMagnitude = (normalizedMagnitude > 0.0)
-            ? (20 * (normalizedMagnitude).clamp(0.0001, 1.0)).clamp(0.0, 1.0)
-            : 0.0;
+        // Calculate magnitude using Pythagorean theorem
+        final magnitude = math.sqrt((real * real) + (imag * imag));
 
-        magnitudes.add(logMagnitude);
+        // Normalize to 0..1 range
+        // Maximum possible magnitude: sqrt(128^2 + 128^2) ≈ 181.02
+        final normalized = (magnitude / 181.02).clamp(0.0, 1.0);
+
+        // Apply power curve for better visual response
+        // Power < 1.0 compresses dynamic range, making quiet sounds more visible
+        // This is intentional for music visualization to show all frequency content
+        final enhanced = math.pow(normalized, 0.6).toDouble();
+
+        magnitudes.add(enhanced);
       }
 
       _fftStreamController.add(magnitudes);
 
-      // Process frequency bands
       final frequencyData = _extractFrequencyBands(magnitudes);
       _frequencyDataStreamController.add(frequencyData);
     } catch (e) {
@@ -195,9 +207,12 @@ class AudifyController {
 
   void _processWaveformData(List<int> waveformData) {
     try {
-      // Convert byte waveform data to normalized doubles (-1.0 to 1.0)
-      final normalized = waveformData.map((byte) {
-        return (byte - 128) / 128.0;
+      // Convert bytes (0..255) or signed (-128..127) to -1.0..1.0
+      // Use 127.0 as divisor since signed 8-bit range is -128 to +127
+      final normalized = waveformData.map((b) {
+        int v = b & 0xFF;
+        if (v >= 128) v -= 256;
+        return (v / 127.0).clamp(-1.0, 1.0);
       }).toList();
 
       _waveformStreamController.add(normalized);

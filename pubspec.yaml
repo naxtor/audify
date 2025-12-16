@@ -1,6 +1,6 @@
 name: audify
 description: "High-performance audio visualizer for Flutter with circular and bar spectrum displays. Native FFT processing on Android and iOS."
-version: 1.0.1
+version: 1.1.0
 homepage: https://github.com/naxtor/audify
 repository: https://github.com/naxtor/audify
 issue_tracker: https://github.com/naxtor/audify/issues

@@ -2,7 +2,7 @@
 
 A high-performance audio visualizer plugin for Flutter with beautiful trap/dubstep style visualizations including circular spectrum and bar spectrum displays.
 
-[![Pub Version](https://img.shields.io/badge/pub-v1.0.0-blue)](https://pub.dev/packages/audify)
+[![Pub Version](https://img.shields.io/badge/pub-v1.1.0-blue)](https://pub.dev/packages/audify)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![circular spectrum with image demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-875108c491fd79d4.gif)
@@ -46,7 +46,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  audify: ^1.0.0
+  audify: ^1.1.0
   permission_handler: ^11.0.1  # For runtime permissions
 ```
 
@@ -317,6 +317,19 @@ The plugin extracts 7 frequency bands optimized for music visualization:
 
 ### AudifyController
 
+#### Constructor
+
+```dart
+AudifyController({
+  AudifyPlatform? platform,           // Optional: Custom platform for testing
+  int minProcessIntervalMs = 16,      // Optional: Frame throttle interval (default: 16ms / ~60 FPS)
+})
+```
+
+**Parameters:**
+- `platform`: Custom platform implementation (mainly for testing with mocks)
+- `minProcessIntervalMs`: Minimum milliseconds between FFT processing. Lower = smoother but more CPU usage
+
 #### Methods
 
 | Method | Parameters | Description |
@@ -352,6 +365,25 @@ data.average      // Average across all bands
 ```
 
 ## Performance Optimization
+
+### Configure Frame Throttling
+
+Control how frequently FFT data is processed to optimize CPU usage:
+
+```dart
+// Default: 16ms (~60 FPS)
+final controller = AudifyController();
+
+// Custom throttle interval (in milliseconds)
+final controller = AudifyController(minProcessIntervalMs: 33);  // ~30 FPS - better battery life
+final controller = AudifyController(minProcessIntervalMs: 16);  // ~60 FPS - smooth (default)
+final controller = AudifyController(minProcessIntervalMs: 8);   // ~120 FPS - ultra smooth (higher CPU)
+```
+
+**When to adjust:**
+- **Lower values** (8-12ms): Ultra-smooth visualizations on powerful devices
+- **Default** (16ms): Balanced performance for most use cases
+- **Higher values** (25-33ms): Better battery life, still smooth enough for most music
 
 ### Adjust Capture Size
 
