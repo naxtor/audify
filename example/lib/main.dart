@@ -1,8 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:audify/audify.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:audioplayers/audioplayers.dart';
 
 void main() {
   runApp(const MyApp());
@@ -55,11 +57,16 @@ class AudifyDemo extends StatefulWidget {
 }
 
 class _AudifyDemoState extends State<AudifyDemo> {
+  static const MethodChannel _audioChannel = MethodChannel(
+    'audify_example/audio_player',
+  );
+
   late AudifyController _controller;
-  late AudioPlayer _audioPlayer;
+  Timer? _positionTimer;
   bool _isInitialized = false;
   bool _isCapturing = false;
   bool _isPlaying = false;
+  bool _isAudioLoaded = false;
   String _statusMessage = 'Not initialized';
   int _selectedVisualizer = 0;
   Duration _duration = Duration.zero;
@@ -69,48 +76,37 @@ class _AudifyDemoState extends State<AudifyDemo> {
   void initState() {
     super.initState();
     _controller = AudifyController();
-    _audioPlayer = AudioPlayer();
     _setupAudioPlayer();
     _initializeVisualizer();
   }
 
   void _setupAudioPlayer() {
-    // Listen to player state changes
-    _audioPlayer.onPlayerStateChanged.listen((state) {
-      if (mounted) {
-        setState(() {
-          _isPlaying = state == PlayerState.playing;
-        });
-      }
-    });
+    _positionTimer = Timer.periodic(
+      const Duration(milliseconds: 500),
+      (_) => _syncAudioState(),
+    );
+  }
 
-    // Listen to duration changes
-    _audioPlayer.onDurationChanged.listen((duration) {
-      if (mounted) {
-        setState(() {
-          _duration = duration;
-        });
+  Future<void> _syncAudioState() async {
+    try {
+      final state = await _audioChannel.invokeMapMethod<String, Object?>(
+        'getState',
+      );
+      if (!mounted || state == null) {
+        return;
       }
-    });
 
-    // Listen to position changes
-    _audioPlayer.onPositionChanged.listen((position) {
-      if (mounted) {
-        setState(() {
-          _position = position;
-        });
-      }
-    });
-
-    // Listen to completion
-    _audioPlayer.onPlayerComplete.listen((event) {
-      if (mounted) {
-        setState(() {
-          _position = Duration.zero;
-          _isPlaying = false;
-        });
-      }
-    });
+      final completed = state['isCompleted'] == true;
+      setState(() {
+        _isPlaying = state['isPlaying'] == true;
+        _duration = Duration(milliseconds: state['durationMs'] as int? ?? 0);
+        _position = completed
+            ? Duration.zero
+            : Duration(milliseconds: state['positionMs'] as int? ?? 0);
+      });
+    } catch (_) {
+      // The example player is best-effort; UI controls surface play errors.
+    }
   }
 
   Future<void> _initializeVisualizer() async {
@@ -155,7 +151,15 @@ class _AudifyDemoState extends State<AudifyDemo> {
 
   Future<void> _playMusic() async {
     try {
-      await _audioPlayer.play(AssetSource('musics/music.mp3'));
+      if (!_isAudioLoaded) {
+        await _audioChannel.invokeMethod<void>('load', {
+          'asset': 'assets/musics/music.mp3',
+        });
+        _isAudioLoaded = true;
+      }
+
+      await _audioChannel.invokeMethod<void>('play');
+      await _syncAudioState();
 
       // Auto-start capture when music plays
       if (_isInitialized && !_isCapturing) {
@@ -173,22 +177,27 @@ class _AudifyDemoState extends State<AudifyDemo> {
   }
 
   Future<void> _pauseMusic() async {
-    await _audioPlayer.pause();
+    await _audioChannel.invokeMethod<void>('pause');
+    await _syncAudioState();
   }
 
   Future<void> _resumeMusic() async {
-    await _audioPlayer.resume();
+    await _playMusic();
   }
 
   Future<void> _stopMusic() async {
-    await _audioPlayer.stop();
+    await _audioChannel.invokeMethod<void>('stop');
+    await _syncAudioState();
     setState(() {
       _position = Duration.zero;
     });
   }
 
   Future<void> _seekTo(Duration position) async {
-    await _audioPlayer.seek(position);
+    await _audioChannel.invokeMethod<void>('seek', {
+      'positionMs': position.inMilliseconds,
+    });
+    await _syncAudioState();
   }
 
   String _formatDuration(Duration duration) {
@@ -200,7 +209,8 @@ class _AudifyDemoState extends State<AudifyDemo> {
 
   @override
   void dispose() {
-    _audioPlayer.dispose();
+    _positionTimer?.cancel();
+    _audioChannel.invokeMethod<void>('release');
     _controller.dispose();
     super.dispose();
   }

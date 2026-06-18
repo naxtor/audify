@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/services.dart';
 
 /// Platform abstraction for Audify plugin.
@@ -6,7 +7,10 @@ import 'package:flutter/services.dart';
 /// This allows injecting a test/mock implementation for unit tests and
 /// keeps `AudifyController` decoupled from `MethodChannel`/`EventChannel`.
 abstract class AudifyPlatform {
-  Future<void> initialize(int audioSessionId, int captureSize);
+  Future<AudifyInitializationResult> initialize(
+    int audioSessionId,
+    int captureSize,
+  );
   Future<void> startCapture();
   Future<void> stopCapture();
   Future<void> release();
@@ -18,19 +22,43 @@ abstract class AudifyPlatform {
   Stream<List<int>> waveformStream();
 }
 
+/// Metadata returned by the native platform after initialization.
+class AudifyInitializationResult {
+  const AudifyInitializationResult({this.sampleRate, this.captureSize});
+
+  /// Native audio sample rate in Hz.
+  final int? sampleRate;
+
+  /// Actual native capture size after platform validation.
+  final int? captureSize;
+}
+
 /// Default implementation using `MethodChannel`/`EventChannel`.
 class MethodChannelAudify implements AudifyPlatform {
   static const MethodChannel _methodChannel = MethodChannel('audify');
   static const EventChannel _fftEventChannel = EventChannel('audify/fft');
-  static const EventChannel _waveformEventChannel =
-      EventChannel('audify/waveform');
+  static const EventChannel _waveformEventChannel = EventChannel(
+    'audify/waveform',
+  );
 
   @override
-  Future<void> initialize(int audioSessionId, int captureSize) async {
-    await _methodChannel.invokeMethod('initialize', {
+  Future<AudifyInitializationResult> initialize(
+    int audioSessionId,
+    int captureSize,
+  ) async {
+    final result = await _methodChannel.invokeMethod<dynamic>('initialize', {
       'audioSessionId': audioSessionId,
       'captureSize': captureSize,
     });
+
+    if (result is Map) {
+      return AudifyInitializationResult(
+        sampleRate: result['sampleRate'] as int?,
+        captureSize: result['captureSize'] as int?,
+      );
+    }
+
+    return const AudifyInitializationResult();
   }
 
   @override
@@ -50,15 +78,32 @@ class MethodChannelAudify implements AudifyPlatform {
 
   @override
   Stream<List<int>> fftStream() {
-    return _fftEventChannel
-        .receiveBroadcastStream()
-        .map((event) => (event as List).cast<int>());
+    return _fftEventChannel.receiveBroadcastStream().map(decodeAudioByteEvent);
   }
 
   @override
   Stream<List<int>> waveformStream() {
-    return _waveformEventChannel
-        .receiveBroadcastStream()
-        .map((event) => (event as List).cast<int>());
+    return _waveformEventChannel.receiveBroadcastStream().map(
+      decodeAudioByteEvent,
+    );
   }
+}
+
+/// Decodes platform audio byte payloads from typed data or legacy lists.
+List<int> decodeAudioByteEvent(dynamic event) {
+  if (event is Uint8List) {
+    return event;
+  }
+
+  if (event is Int8List) {
+    return event.map((byte) => byte & 0xFF).toList(growable: false);
+  }
+
+  if (event is List) {
+    return event.cast<int>();
+  }
+
+  throw FormatException(
+    'Unsupported audio byte event type: ${event.runtimeType}',
+  );
 }

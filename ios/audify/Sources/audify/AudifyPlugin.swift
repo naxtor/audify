@@ -45,12 +45,14 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         switch call.method {
         case "initialize":
-            if let args = call.arguments as? [String: Any],
-               let audioSessionId = args["audioSessionId"] as? Int {
-                initialize(audioSessionId: audioSessionId, result: result)
-            } else {
-                initialize(audioSessionId: 0, result: result)
-            }
+            let args = call.arguments as? [String: Any]
+            let audioSessionId = args?["audioSessionId"] as? Int ?? 0
+            let requestedCaptureSize = args?["captureSize"] as? Int ?? captureSize
+            initialize(
+                audioSessionId: audioSessionId,
+                captureSize: requestedCaptureSize,
+                result: result
+            )
         case "setCaptureSize":
             if let args = call.arguments as? [String: Any],
                let size = args["size"] as? Int {
@@ -69,8 +71,10 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
         }
     }
     
-    private func initialize(audioSessionId: Int, result: @escaping FlutterResult) {
+    private func initialize(audioSessionId: Int, captureSize: Int, result: @escaping FlutterResult) {
         do {
+            self.captureSize = captureSize
+            
             // Setup audio session
             let audioSession = AVAudioSession.sharedInstance()
             try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetooth])
@@ -82,7 +86,10 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
             // Setup FFT
             setupFFT()
             
-            result(true)
+            result([
+                "sampleRate": Int(audioSession.sampleRate.rounded()),
+                "captureSize": self.captureSize
+            ])
         } catch {
             result(FlutterError(code: "INIT_ERROR", message: error.localizedDescription, details: nil))
         }
@@ -90,7 +97,6 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     
     private func setupFFT() {
         // Create FFT setup for real-to-complex transform
-        let log2n = vDSP_Length(log2(Float(captureSize)))
         fftSetup = vDSP_DFT_zrop_CreateSetup(nil, vDSP_Length(captureSize), vDSP_DFT_Direction.FORWARD)
         
         // Create Hann window for FFT
@@ -105,6 +111,11 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     }
     
     private func startCapture(result: @escaping FlutterResult) {
+        if isCapturing {
+            result(true)
+            return
+        }
+
         guard let audioEngine = audioEngine else {
             result(FlutterError(code: "ENGINE_ERROR", message: "Audio engine not initialized", details: nil))
             return
@@ -130,6 +141,11 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     }
     
     private func stopCapture(result: @escaping FlutterResult) {
+        if !isCapturing {
+            result(true)
+            return
+        }
+
         guard let audioEngine = audioEngine else {
             result(false)
             return
@@ -170,9 +186,17 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     }
     
     private func processWaveform(samples: [Float]) {
-        // Convert Float samples to Int8 for compatibility with Android format
-        let waveformData: [Int8] = samples.prefix(captureSize).map { sample in
-            Int8(max(-128, min(127, sample * 127)))
+        // Convert Float samples to Android Visualizer-compatible unsigned
+        // waveform bytes centered at 128.
+        let waveformData: [UInt8] = samples.prefix(captureSize).map { sample in
+            let clampedSample = max(-1.0, min(1.0, sample))
+            let scaledSample: Float
+            if clampedSample < 0 {
+                scaledSample = (clampedSample * 128.0) + 128.0
+            } else {
+                scaledSample = (clampedSample * 127.0) + 128.0
+            }
+            return UInt8(max(0, min(255, Int(scaledSample.rounded()))))
         }
         
         waveformStreamHandler?.sendData(data: waveformData)
@@ -208,18 +232,18 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
         vDSP_DFT_Execute(fftSetup, &windowedSamples, &complexBuffer.realp!, &complexBuffer.imagp!)
         
         // Convert to Android Visualizer FFT format: [real0, real1, ..., realN/2, imag1, ..., imagN/2-1]
-        var fftData = [Int8](repeating: 0, count: captureSize)
+        var fftData = [UInt8](repeating: 0, count: captureSize)
         
         // Copy real parts
         for i in 0..<captureSize / 2 {
             let value = Int8(max(-128, min(127, realPart[i] * 127)))
-            fftData[i] = value
+            fftData[i] = UInt8(bitPattern: value)
         }
         
         // Copy imaginary parts (skip DC and Nyquist)
         for i in 1..<captureSize / 2 {
             let value = Int8(max(-128, min(127, imagPart[i] * 127)))
-            fftData[captureSize / 2 + i - 1] = value
+            fftData[captureSize / 2 + i - 1] = UInt8(bitPattern: value)
         }
         
         fftStreamHandler?.sendData(data: fftData)
@@ -240,9 +264,9 @@ class AudioStreamHandler: NSObject, FlutterStreamHandler {
         return nil
     }
     
-    func sendData(data: [Int8]) {
+    func sendData(data: [UInt8]) {
         DispatchQueue.main.async { [weak self] in
-            self?.eventSink?(data)
+            self?.eventSink?(FlutterStandardTypedData(bytes: Data(data)))
         }
     }
 }

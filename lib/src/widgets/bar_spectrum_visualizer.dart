@@ -1,8 +1,9 @@
 // lib/src/widgets/bar_spectrum_visualizer.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
 import '../audify_controller.dart';
 import '../frequency_data.dart';
+import 'spectrum_magnitude_mapper.dart';
 
 class BarSpectrumVisualizer extends StatefulWidget {
   final AudifyController controller;
@@ -37,6 +38,7 @@ class _BarSpectrumVisualizerState extends State<BarSpectrumVisualizer>
   List<double> _magnitudes = [];
   List<double> _smoothedMagnitudes = [];
   late AnimationController _animationController;
+  StreamSubscription<FrequencyData>? _frequencyDataSubscription;
 
   @override
   void initState() {
@@ -46,10 +48,31 @@ class _BarSpectrumVisualizerState extends State<BarSpectrumVisualizer>
       duration: const Duration(milliseconds: 50),
     )..repeat();
 
+    _resetMagnitudes();
+    _subscribeToController();
+  }
+
+  @override
+  void didUpdateWidget(BarSpectrumVisualizer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.barCount != widget.barCount) {
+      _resetMagnitudes();
+    }
+    if (oldWidget.controller != widget.controller) {
+      _subscribeToController();
+    }
+  }
+
+  void _resetMagnitudes() {
     _magnitudes = List.filled(widget.barCount, 0.0);
     _smoothedMagnitudes = List.filled(widget.barCount, 0.0);
+  }
 
-    widget.controller.frequencyDataStream.listen((data) {
+  void _subscribeToController() {
+    _frequencyDataSubscription?.cancel();
+    _frequencyDataSubscription = widget.controller.frequencyDataStream.listen((
+      data,
+    ) {
       if (mounted) {
         setState(() {
           _updateMagnitudes(data);
@@ -62,29 +85,20 @@ class _BarSpectrumVisualizerState extends State<BarSpectrumVisualizer>
     final rawMags = data.rawMagnitudes;
     if (rawMags.isEmpty) return;
 
-    // Distribute frequency data across bars with logarithmic scaling
-    for (int i = 0; i < widget.barCount; i++) {
-      final index = _getLogIndex(i, widget.barCount, rawMags.length);
-      if (index < rawMags.length) {
-        _magnitudes[i] = rawMags[index];
-      }
-    }
-
-    // Apply smoothing
-    for (int i = 0; i < widget.barCount; i++) {
-      _smoothedMagnitudes[i] = _smoothedMagnitudes[i] * widget.smoothing +
-          _magnitudes[i] * (1 - widget.smoothing);
-    }
-  }
-
-  int _getLogIndex(int linearIndex, int totalBars, int dataLength) {
-    final normalized = linearIndex / totalBars;
-    final logIndex = (math.pow(dataLength, normalized) - 1).toInt();
-    return logIndex.clamp(0, dataLength - 1);
+    _magnitudes = mapLogarithmicMagnitudes(
+      rawMagnitudes: rawMags,
+      outputCount: widget.barCount,
+    );
+    _smoothedMagnitudes = smoothMagnitudes(
+      previous: _smoothedMagnitudes,
+      current: _magnitudes,
+      smoothing: widget.smoothing,
+    );
   }
 
   @override
   void dispose() {
+    _frequencyDataSubscription?.cancel();
     _animationController.dispose();
     super.dispose();
   }

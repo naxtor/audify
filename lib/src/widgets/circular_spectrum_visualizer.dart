@@ -1,9 +1,11 @@
 // lib/src/widgets/circular_spectrum_visualizer.dart
-import 'package:flutter/material.dart';
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
 import '../audify_controller.dart';
 import '../frequency_data.dart';
+import 'spectrum_magnitude_mapper.dart';
 
 class CircularSpectrumVisualizer extends StatefulWidget {
   final AudifyController controller;
@@ -37,6 +39,7 @@ class _CircularSpectrumVisualizerState extends State<CircularSpectrumVisualizer>
   List<double> _magnitudes = [];
   List<double> _smoothedMagnitudes = [];
   late AnimationController _animationController;
+  StreamSubscription<FrequencyData>? _frequencyDataSubscription;
   ui.Image? _resolvedImage;
 
   @override
@@ -47,26 +50,41 @@ class _CircularSpectrumVisualizerState extends State<CircularSpectrumVisualizer>
       duration: const Duration(milliseconds: 50),
     )..repeat();
 
-    _magnitudes = List.filled(widget.barCount, 0.0);
-    _smoothedMagnitudes = List.filled(widget.barCount, 0.0);
-
-    widget.controller.frequencyDataStream.listen((data) {
-      if (mounted) {
-        setState(() {
-          _updateMagnitudes(data);
-        });
-      }
-    });
-
+    _resetMagnitudes();
+    _subscribeToController();
     _loadImage();
   }
 
   @override
   void didUpdateWidget(CircularSpectrumVisualizer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.barCount != widget.barCount) {
+      _resetMagnitudes();
+    }
+    if (oldWidget.controller != widget.controller) {
+      _subscribeToController();
+    }
     if (oldWidget.centerImage != widget.centerImage) {
       _loadImage();
     }
+  }
+
+  void _resetMagnitudes() {
+    _magnitudes = List.filled(widget.barCount, 0.0);
+    _smoothedMagnitudes = List.filled(widget.barCount, 0.0);
+  }
+
+  void _subscribeToController() {
+    _frequencyDataSubscription?.cancel();
+    _frequencyDataSubscription = widget.controller.frequencyDataStream.listen((
+      data,
+    ) {
+      if (mounted) {
+        setState(() {
+          _updateMagnitudes(data);
+        });
+      }
+    });
   }
 
   void _loadImage() async {
@@ -86,34 +104,23 @@ class _CircularSpectrumVisualizerState extends State<CircularSpectrumVisualizer>
   }
 
   void _updateMagnitudes(FrequencyData data) {
-    // Distribute frequency bands across circular bars
     final rawMags = data.rawMagnitudes;
     if (rawMags.isEmpty) return;
 
-    // Take logarithmic distribution for better visual representation
-    for (int i = 0; i < widget.barCount; i++) {
-      final index = _getLogIndex(i, widget.barCount, rawMags.length);
-      if (index < rawMags.length) {
-        _magnitudes[i] = rawMags[index];
-      }
-    }
-
-    // Apply smoothing
-    for (int i = 0; i < widget.barCount; i++) {
-      _smoothedMagnitudes[i] = _smoothedMagnitudes[i] * widget.smoothing +
-          _magnitudes[i] * (1 - widget.smoothing);
-    }
-  }
-
-  int _getLogIndex(int linearIndex, int totalBars, int dataLength) {
-    // Logarithmic mapping for better frequency distribution
-    final normalized = linearIndex / totalBars;
-    final logIndex = (math.pow(dataLength, normalized) - 1).toInt();
-    return logIndex.clamp(0, dataLength - 1);
+    _magnitudes = mapLogarithmicMagnitudes(
+      rawMagnitudes: rawMags,
+      outputCount: widget.barCount,
+    );
+    _smoothedMagnitudes = smoothMagnitudes(
+      previous: _smoothedMagnitudes,
+      current: _magnitudes,
+      smoothing: widget.smoothing,
+    );
   }
 
   @override
   void dispose() {
+    _frequencyDataSubscription?.cancel();
     _animationController.dispose();
     super.dispose();
   }

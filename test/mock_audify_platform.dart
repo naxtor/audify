@@ -27,9 +27,14 @@ class MockAudifyPlatform implements AudifyPlatform {
 
   int? lastAudioSessionId;
   int? lastCaptureSize;
+  int? sampleRate;
+  int? actualCaptureSize;
 
   @override
-  Future<void> initialize(int audioSessionId, int captureSize) async {
+  Future<AudifyInitializationResult> initialize(
+    int audioSessionId,
+    int captureSize,
+  ) async {
     initializeCallCount++;
     lastAudioSessionId = audioSessionId;
     lastCaptureSize = captureSize;
@@ -39,6 +44,11 @@ class MockAudifyPlatform implements AudifyPlatform {
     }
 
     _isInitialized = true;
+
+    return AudifyInitializationResult(
+      sampleRate: sampleRate,
+      captureSize: actualCaptureSize,
+    );
   }
 
   @override

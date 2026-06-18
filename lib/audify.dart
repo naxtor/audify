@@ -14,7 +14,8 @@
 /// ```dart
 /// final controller = AudifyController();
 ///
-/// // Initialize with system audio
+/// // On Android, audioSessionId 0 targets the output mix when permitted.
+/// // Specific player sessions can be passed on Android.
 /// await controller.initialize(audioSessionId: 0);
 ///
 /// // Start capturing

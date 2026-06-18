@@ -2,7 +2,7 @@
 
 A high-performance audio visualizer plugin for Flutter with beautiful trap/dubstep style visualizations including circular spectrum and bar spectrum displays.
 
-[![Pub Version](https://img.shields.io/badge/pub-v1.1.0-blue)](https://pub.dev/packages/audify)
+[![Pub Version](https://img.shields.io/badge/pub-v1.1.1-blue)](https://pub.dev/packages/audify)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![circular spectrum with image demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-875108c491fd79d4.gif)
@@ -12,20 +12,20 @@ A high-performance audio visualizer plugin for Flutter with beautiful trap/dubst
 
 ## Key Highlights
 
-**🎧 No Audio File Required!**  
-Unlike other visualizer libraries, this plugin **captures and visualizes ANY audio playing on your device** - whether it's from Spotify, YouTube, local music players, or any other app. No need to import or manage audio files in your Flutter app!
+**Real-time native audio visualization**  
+Audify provides Flutter widgets and streams for visualizing captured audio. Android uses the platform `Visualizer` API, where `audioSessionId: 0` targets the output mix only when the OS and device permit it. iOS uses `AVAudioEngine` and visualizes audio routed through the plugin-created engine, not arbitrary audio from other apps.
 
 ## Features
 
 🎵 **Real-time Audio Visualization**
 - Circular spectrum visualizer with smooth 60 FPS animations and optional center image/album artwork
 - Vertical bar spectrum with optional mirror effect
-- Visualizes **system-wide audio** - works with any audio source on the device
+- FFT, waveform, and seven-band frequency data streams for custom visualizers
 
 🚀 **High Performance**
 - Native FFT processing for optimal performance
-  - Android: Visualizer API (captures system audio output)
-  - iOS: Accelerate framework (vDSP) with AVAudioEngine
+  - Android: Visualizer API for output-mix or session-based visualization where supported
+  - iOS: AVAudioEngine with Accelerate framework (vDSP)
 - Smooth animations with configurable smoothing
 - Minimal CPU usage (<5%)
 - Adaptive sizing for non-square containers
@@ -37,7 +37,7 @@ Unlike other visualizer libraries, this plugin **captures and visualizes ANY aud
 - Add album artwork or any image to circular visualizer center
 
 📱 **Cross-Platform Support**
-- ✅ Android (API 21+)
+- ✅ Android (API 24+)
 - ✅ iOS (12.0+)
 
 ## Installation
@@ -46,7 +46,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  audify: ^1.1.0
+  audify: ^1.1.1
   permission_handler: ^11.0.1  # For runtime permissions
 ```
 
@@ -78,7 +78,7 @@ Add permission to `ios/Runner/Info.plist`:
 
 ## Quick Start
 
-> **💡 Pro Tip:** This plugin captures **system-wide audio**! You don't need to import audio files or use a specific audio player. Just play music from any app (Spotify, YouTube, local player, etc.) and the visualizer will react to it automatically.
+> **Platform note:** On Android, `audioSessionId: 0` requests output-mix visualization when the device allows it. A specific Android media player session ID can be passed to target that player. The current iOS implementation visualizes audio routed through Audify's `AVAudioEngine`.
 
 ### 1. Request Permission
 
@@ -99,10 +99,11 @@ import 'package:audify/audify.dart';
 
 final controller = AudifyController();
 
-// Initialize with system audio (audioSessionId: 0 captures all audio)
+// Android: audioSessionId 0 targets the output mix when permitted.
+// iOS: visualizes audio routed through Audify's AVAudioEngine.
 await controller.initialize(audioSessionId: 0);
 
-// Start capturing - now it will visualize ANY audio playing on the device!
+// Start capturing audio data for visualization.
 await controller.startCapture();
 ```
 
@@ -344,6 +345,7 @@ AudifyController({
 | Property | Type | Description |
 |----------|------|-------------|
 | `fftStream` | `Stream<List<double>>` | Raw FFT magnitudes (0.0-1.0) |
+| `waveformStream` | `Stream<List<double>>` | Raw waveform samples (-1.0-1.0) |
 | `frequencyDataStream` | `Stream<FrequencyData>` | Processed frequency bands |
 | `isInitialized` | `bool` | Initialization status |
 | `isCapturing` | `bool` | Capture status |
@@ -458,9 +460,9 @@ SizedBox(
 ## Platform Differences
 
 **iOS vs Android:**
-- iOS captures system-wide audio (all apps)
-- Android can target specific audio sessions
-- Both achieve equivalent performance
+- Android uses `android.media.audiofx.Visualizer`. `audioSessionId: 0` targets the output mix when the OS/device permits it, and specific player session IDs can target individual sessions.
+- iOS uses `AVAudioEngine` and currently visualizes audio routed through the plugin-created engine.
+- Both platforms emit FFT and waveform streams normalized by the Dart controller.
 
 ## Example App
 

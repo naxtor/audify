@@ -91,7 +91,7 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
                         samplingRate: Int
                     ) {
                         waveform?.let {
-                            waveformStreamHandler?.sendData(it.toList())
+                            waveformStreamHandler?.sendData(it)
                         }
                     }
 
@@ -101,20 +101,33 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
                         samplingRate: Int
                     ) {
                         fft?.let {
-                            fftStreamHandler?.sendData(it.toList())
+                            fftStreamHandler?.sendData(it)
                         }
                     }
                 }, Visualizer.getMaxCaptureRate() / 2, true, true)
+
+                result.success(mapOf(
+                    "sampleRate" to sampleRateHz(this.samplingRate),
+                    "captureSize" to validSize
+                ))
             }
-            
-            result.success(true)
         } catch (e: Exception) {
             result.error("INIT_ERROR", e.message, null)
         }
     }
 
+    private fun sampleRateHz(rawSampleRate: Int): Int {
+        // Visualizer reports sampling rate in milliHertz.
+        return if (rawSampleRate > 1_000_000) rawSampleRate / 1000 else rawSampleRate
+    }
+
     private fun startCapture(result: Result) {
         try {
+            if (visualizer?.enabled == true) {
+                result.success(true)
+                return
+            }
+
             visualizer?.enabled = true
             result.success(true)
         } catch (e: Exception) {
@@ -124,6 +137,11 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
 
     private fun stopCapture(result: Result) {
         try {
+            if (visualizer?.enabled != true) {
+                result.success(true)
+                return
+            }
+
             visualizer?.enabled = false
             result.success(true)
         } catch (e: Exception) {
@@ -170,7 +188,7 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
             eventSink = null
         }
 
-        fun sendData(data: List<Byte>) {
+        fun sendData(data: ByteArray) {
             handler.post {
                 eventSink?.success(data)
             }

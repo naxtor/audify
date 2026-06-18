@@ -1,7 +1,18 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:audify/src/audify_controller.dart';
+import 'package:audify/src/audify_platform.dart';
 import 'package:audify/src/frequency_data.dart';
 import 'mock_audify_platform.dart';
+
+List<int> _fftDataWithRealBin({
+  int byteLength = 9600,
+  int bin = 4,
+  int value = 127,
+}) {
+  return List<int>.filled(byteLength, 0)..[bin] = value;
+}
 
 void main() {
   late AudifyController controller;
@@ -57,14 +68,21 @@ void main() {
 
   group('AudifyController Capture', () {
     test('startCapture requires initialization', () async {
-      expect(
-        () => controller.startCapture(),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => controller.startCapture(), throwsA(isA<Exception>()));
     });
 
     test('startCapture sets isCapturing to true', () async {
       await controller.initialize(audioSessionId: 0);
+      await controller.startCapture();
+
+      expect(controller.isCapturing, true);
+      expect(mockPlatform.startCaptureCallCount, 1);
+    });
+
+    test('startCapture is idempotent while already capturing', () async {
+      await controller.initialize(audioSessionId: 0);
+
+      await controller.startCapture();
       await controller.startCapture();
 
       expect(controller.isCapturing, true);
@@ -80,14 +98,31 @@ void main() {
       expect(mockPlatform.stopCaptureCallCount, 1);
     });
 
+    test('stopCapture is a no-op when not capturing', () async {
+      await controller.initialize(audioSessionId: 0);
+
+      await controller.stopCapture();
+
+      expect(controller.isCapturing, false);
+      expect(mockPlatform.stopCaptureCallCount, 0);
+    });
+
+    test('stopCapture is idempotent after capture stops', () async {
+      await controller.initialize(audioSessionId: 0);
+      await controller.startCapture();
+
+      await controller.stopCapture();
+      await controller.stopCapture();
+
+      expect(controller.isCapturing, false);
+      expect(mockPlatform.stopCaptureCallCount, 1);
+    });
+
     test('startCapture handles platform errors', () async {
       await controller.initialize(audioSessionId: 0);
       mockPlatform.shouldThrowOnStartCapture = true;
 
-      expect(
-        () => controller.startCapture(),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => controller.startCapture(), throwsA(isA<Exception>()));
     });
   });
 
@@ -125,6 +160,41 @@ void main() {
       expect(result, isA<List<double>>());
       expect(result.length, 256);
       expect(result.every((v) => v >= -1.0 && v <= 1.0), true);
+    });
+
+    test('normalizes unsigned waveform midpoint as silence', () async {
+      await controller.initialize(audioSessionId: 0);
+      await controller.startCapture();
+
+      final streamFuture = controller.waveformStream.first;
+      mockPlatform.emitWaveformData([128]);
+
+      expect(await streamFuture, [0.0]);
+    });
+
+    test('normalizes unsigned waveform minimum and maximum', () async {
+      await controller.initialize(audioSessionId: 0);
+      await controller.startCapture();
+
+      final streamFuture = controller.waveformStream.first;
+      mockPlatform.emitWaveformData([0, 255]);
+
+      expect(await streamFuture, [-1.0, 1.0]);
+    });
+
+    test('normalizes mixed unsigned waveform samples', () async {
+      await controller.initialize(audioSessionId: 0);
+      await controller.startCapture();
+
+      final streamFuture = controller.waveformStream.first;
+      mockPlatform.emitWaveformData([0, 64, 128, 192, 255]);
+
+      final result = await streamFuture;
+      expect(result[0], -1.0);
+      expect(result[1], -0.5);
+      expect(result[2], 0.0);
+      expect(result[3], closeTo(64 / 127, 0.000001));
+      expect(result[4], 1.0);
     });
 
     test('frequencyDataStream emits FrequencyData', () async {
@@ -181,8 +251,7 @@ void main() {
       await controller.dispose();
       await controller.dispose();
 
-      // Should not throw and release should be called only once per dispose
-      expect(mockPlatform.releaseCallCount, 3);
+      expect(mockPlatform.releaseCallCount, 1);
     });
 
     test('dispose stops capture if running', () async {
@@ -215,10 +284,7 @@ void main() {
       await controller.initialize(audioSessionId: 0);
       mockPlatform.shouldThrowOnStartCapture = true;
 
-      expect(
-        () => controller.startCapture(),
-        throwsA(isA<Exception>()),
-      );
+      expect(() => controller.startCapture(), throwsA(isA<Exception>()));
     });
 
     test('handles errors during initialization', () async {
@@ -256,8 +322,9 @@ void main() {
       await throttledController.startCapture();
 
       final receivedData = <List<double>>[];
-      final subscription =
-          throttledController.fftStream.listen(receivedData.add);
+      final subscription = throttledController.fftStream.listen(
+        receivedData.add,
+      );
 
       // Rapidly emit data
       for (int i = 0; i < 10; i++) {
@@ -298,9 +365,71 @@ void main() {
       expect(result.every((v) => v >= 0.0 && v <= 1.0), true);
       expect(result.length, 128);
     });
+
+    test('uses default sample rate for frequency bands', () async {
+      await controller.initialize(audioSessionId: 0, captureSize: 4800);
+      await controller.startCapture();
+
+      final streamFuture = controller.frequencyDataStream.first;
+      mockPlatform.emitFftData(_fftDataWithRealBin());
+
+      final result = await streamFuture;
+      expect(result.subBass, greaterThan(result.bass));
+    });
+
+    test('uses platform sample rate for frequency bands', () async {
+      mockPlatform.sampleRate = 96000;
+
+      await controller.initialize(audioSessionId: 0, captureSize: 4800);
+      await controller.startCapture();
+
+      final streamFuture = controller.frequencyDataStream.first;
+      mockPlatform.emitFftData(_fftDataWithRealBin());
+
+      final result = await streamFuture;
+      expect(result.bass, greaterThan(result.subBass));
+    });
+
+    test(
+      'falls back to default sample rate when metadata is missing',
+      () async {
+        mockPlatform.sampleRate = 96000;
+        await controller.initialize(audioSessionId: 0, captureSize: 4800);
+
+        mockPlatform.sampleRate = null;
+        await controller.initialize(audioSessionId: 0, captureSize: 4800);
+        await controller.startCapture();
+
+        final streamFuture = controller.frequencyDataStream.first;
+        mockPlatform.emitFftData(_fftDataWithRealBin());
+
+        final result = await streamFuture;
+        expect(result.subBass, greaterThan(result.bass));
+      },
+    );
   });
 
   group('AudifyController Platform Integration', () {
+    test('decodes typed byte payloads from platform streams', () {
+      expect(decodeAudioByteEvent(Uint8List.fromList([0, 128, 255])), [
+        0,
+        128,
+        255,
+      ]);
+    });
+
+    test('decodes signed typed byte payloads as unsigned bytes', () {
+      expect(decodeAudioByteEvent(Int8List.fromList([0, -128, -1])), [
+        0,
+        128,
+        255,
+      ]);
+    });
+
+    test('keeps legacy list payload support', () {
+      expect(decodeAudioByteEvent([0, 128, 255]), [0, 128, 255]);
+    });
+
     test('uses default platform when none provided', () {
       final defaultController = AudifyController();
       expect(defaultController, isNotNull);

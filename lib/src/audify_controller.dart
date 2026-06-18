@@ -20,6 +20,9 @@ import 'audify_platform.dart';
 /// CircularSpectrumVisualizer(controller: controller)
 /// ```
 class AudifyController {
+  static const int _defaultCaptureSize = 2048;
+  static const int _defaultSampleRate = 44100;
+
   final AudifyPlatform _platform;
 
   StreamSubscription<List<int>>? _fftSubscription;
@@ -34,7 +37,9 @@ class AudifyController {
 
   bool _isInitialized = false;
   bool _isCapturing = false;
-  int _captureSize = 2048;
+  bool _isDisposed = false;
+  int _captureSize = _defaultCaptureSize;
+  int _sampleRate = _defaultSampleRate;
 
   DateTime? _lastProcessTime;
 
@@ -46,9 +51,8 @@ class AudifyController {
   ///
   /// Provide a custom `AudifyPlatform` for testing; otherwise the default
   /// `MethodChannelAudify` is used.
-  AudifyController({AudifyPlatform? platform, int minProcessIntervalMs = 16})
-      : _platform = platform ?? MethodChannelAudify(),
-        _minProcessIntervalMs = minProcessIntervalMs;
+  AudifyController({AudifyPlatform? platform, this._minProcessIntervalMs = 16})
+    : _platform = platform ?? MethodChannelAudify();
 
   /// Stream of raw FFT magnitude data (0.0 - 1.0)
   Stream<List<double>> get fftStream => _fftStreamController.stream;
@@ -63,17 +67,34 @@ class AudifyController {
   bool get isInitialized => _isInitialized;
   bool get isCapturing => _isCapturing;
 
-  /// Initialize the visualizer with an audio session ID
-  /// For system audio: use 0
-  /// For specific MediaPlayer: use player.audioSessionId
+  /// Initialize the visualizer.
+  ///
+  /// On Android, `audioSessionId: 0` requests output-mix visualization when the
+  /// device permits it. Specific player session IDs can target that player.
+  /// The current iOS implementation does not use `audioSessionId`.
   Future<void> initialize({
     int audioSessionId = 0,
-    int captureSize = 2048,
+    int captureSize = _defaultCaptureSize,
   }) async {
+    if (_isDisposed) {
+      throw StateError('Cannot initialize a disposed AudifyController.');
+    }
+
     try {
-      _captureSize = captureSize;
-      // Pass captureSize during initialization (required for API 36+)
-      await _platform.initialize(audioSessionId, _captureSize);
+      // Pass captureSize during initialization (required for API 36+).
+      final initializationResult = await _platform.initialize(
+        audioSessionId,
+        captureSize,
+      );
+
+      _captureSize = _positiveOrDefault(
+        initializationResult.captureSize,
+        captureSize,
+      );
+      _sampleRate = _positiveOrDefault(
+        initializationResult.sampleRate,
+        _defaultSampleRate,
+      );
 
       _isInitialized = true;
     } catch (e) {
@@ -83,8 +104,16 @@ class AudifyController {
 
   /// Start capturing audio data
   Future<void> startCapture() async {
+    if (_isDisposed) {
+      throw StateError('Cannot start a disposed AudifyController.');
+    }
+
     if (!_isInitialized) {
       throw Exception('Visualizer not initialized. Call initialize() first.');
+    }
+
+    if (_isCapturing) {
+      return;
     }
 
     try {
@@ -116,28 +145,33 @@ class AudifyController {
 
   /// Stop capturing audio data
   Future<void> stopCapture() async {
+    if (!_isCapturing) {
+      return;
+    }
+
     try {
       await _platform.stopCapture();
-
-      await _fftSubscription?.cancel();
-      _fftSubscription = null;
-
-      await _waveformSubscription?.cancel();
-      _waveformSubscription = null;
-
-      _isCapturing = false;
     } catch (e) {
       throw Exception('Failed to stop capture: $e');
+    } finally {
+      await _cancelCaptureSubscriptions();
+      _isCapturing = false;
     }
   }
 
   /// Release resources
   Future<void> dispose() async {
+    if (_isDisposed) {
+      return;
+    }
+
     try {
       if (_isCapturing) {
         await stopCapture();
       }
     } catch (_) {}
+
+    await _cancelCaptureSubscriptions();
 
     try {
       await _platform.release();
@@ -147,6 +181,7 @@ class AudifyController {
     await _waveformStreamController.close();
     await _frequencyDataStreamController.close();
     _isInitialized = false;
+    _isDisposed = true;
   }
 
   void _processFftData(List<int> fftData) {
@@ -169,21 +204,18 @@ class AudifyController {
         int realByte = bytes[i];
         // Android FFT format: imaginary parts start at index n/2+1 for frequency bin 1
         // So for bin i (where i > 0 and i < n/2), imaginary is at halfSize + i - 1
-        int imagByte =
-            (i == 0 || i == halfSize - 1) ? 0 : bytes[halfSize + i - 1];
+        int imagByte = (i == 0 || i == halfSize - 1)
+            ? 0
+            : bytes[halfSize + i - 1];
 
-        // Convert to signed 8-bit (-128..127)
-        int real = realByte & 0xFF;
-        if (real >= 128) real -= 256;
-
-        int imag = imagByte & 0xFF;
-        if (imag >= 128) imag -= 256;
+        final real = _signedByteValue(realByte);
+        final imag = _signedByteValue(imagByte);
 
         // Calculate magnitude using Pythagorean theorem
         final magnitude = math.sqrt((real * real) + (imag * imag));
 
         // Normalize to 0..1 range
-        // Maximum possible magnitude: sqrt(128^2 + 128^2) ≈ 181.02
+        // Maximum possible magnitude: sqrt(128^2 + 128^2), about 181.02.
         final normalized = (magnitude / 181.02).clamp(0.0, 1.0);
 
         // Apply power curve for better visual response
@@ -207,12 +239,13 @@ class AudifyController {
 
   void _processWaveformData(List<int> waveformData) {
     try {
-      // Convert bytes (0..255) or signed (-128..127) to -1.0..1.0
-      // Use 127.0 as divisor since signed 8-bit range is -128 to +127
+      // Android Visualizer waveform bytes are unsigned 8-bit mono samples
+      // centered at 128. Platform codecs may surface raw bytes as signed ints,
+      // so mask first and then normalize around the unsigned midpoint.
       final normalized = waveformData.map((b) {
-        int v = b & 0xFF;
-        if (v >= 128) v -= 256;
-        return (v / 127.0).clamp(-1.0, 1.0);
+        final centered = _unsignedByteValue(b) - 128;
+        final divisor = centered < 0 ? 128.0 : 127.0;
+        return (centered / divisor).clamp(-1.0, 1.0);
       }).toList();
 
       _waveformStreamController.add(normalized);
@@ -225,9 +258,7 @@ class AudifyController {
 
   FrequencyData _extractFrequencyBands(List<double> magnitudes) {
     // Define frequency bands (in Hz)
-    // Assuming sample rate of 44100 Hz
-    const sampleRate = 44100;
-    final frequencyResolution = sampleRate / _captureSize;
+    final frequencyResolution = _sampleRate / _captureSize;
 
     // Frequency bands for trap/dubstep visualization
     final bands = [
@@ -280,5 +311,24 @@ class AudifyController {
     }
 
     return count > 0 ? sum / count : 0.0;
+  }
+
+  static int _positiveOrDefault(int? value, int fallback) {
+    return value != null && value > 0 ? value : fallback;
+  }
+
+  static int _unsignedByteValue(int byte) => byte & 0xFF;
+
+  static int _signedByteValue(int byte) {
+    final unsigned = _unsignedByteValue(byte);
+    return unsigned >= 128 ? unsigned - 256 : unsigned;
+  }
+
+  Future<void> _cancelCaptureSubscriptions() async {
+    await _fftSubscription?.cancel();
+    _fftSubscription = null;
+
+    await _waveformSubscription?.cancel();
+    _waveformSubscription = null;
   }
 }
