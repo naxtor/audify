@@ -79,6 +79,7 @@ class AudifyController {
     if (_isDisposed) {
       throw StateError('Cannot initialize a disposed AudifyController.');
     }
+    _validateCaptureSize(captureSize);
 
     try {
       // Pass captureSize during initialization (required for API 36+).
@@ -159,6 +160,35 @@ class AudifyController {
     }
   }
 
+  /// Changes the native capture size used for future audio buffers and FFTs.
+  ///
+  /// Capture must be stopped first because Android's `Visualizer` does not
+  /// permit its capture size to change while enabled. The native platform may
+  /// adjust the requested size; the controller uses the applied value when
+  /// calculating frequency bands.
+  Future<void> setCaptureSize(int captureSize) async {
+    if (_isDisposed) {
+      throw StateError(
+        'Cannot change capture size on a disposed AudifyController.',
+      );
+    }
+    if (!_isInitialized) {
+      throw StateError('Initialize the visualizer before changing capture size.');
+    }
+    if (_isCapturing) {
+      throw StateError('Stop capture before changing the capture size.');
+    }
+    _validateCaptureSize(captureSize);
+
+    try {
+      final appliedCaptureSize = await _platform.setCaptureSize(captureSize);
+      _validateCaptureSize(appliedCaptureSize);
+      _captureSize = appliedCaptureSize;
+    } catch (e) {
+      throw Exception('Failed to set capture size: $e');
+    }
+  }
+
   /// Release resources
   Future<void> dispose() async {
     if (_isDisposed) {
@@ -194,19 +224,16 @@ class AudifyController {
       }
       _lastProcessTime = now;
 
-      // Convert Android Visualizer FFT format (bytes) into magnitudes.
-      // Visualizer returns bytes representing signed 8-bit values.
+      // Convert Android Visualizer-compatible FFT bytes into magnitudes.
+      // The layout is [real0, realNyquist, real1, imag1, real2, imag2, ...].
+      // Values are signed 8-bit samples.
       final bytes = fftData;
-      final halfSize = bytes.length ~/ 2;
-      final magnitudes = <double>[];
+      final binCount = bytes.length ~/ 2;
+      final magnitudes = List<double>.filled(binCount, 0.0);
 
-      for (int i = 0; i < halfSize; i++) {
-        int realByte = bytes[i];
-        // Android FFT format: imaginary parts start at index n/2+1 for frequency bin 1
-        // So for bin i (where i > 0 and i < n/2), imaginary is at halfSize + i - 1
-        int imagByte = (i == 0 || i == halfSize - 1)
-            ? 0
-            : bytes[halfSize + i - 1];
+      for (int i = 0; i < binCount; i++) {
+        final realByte = i == 0 ? bytes[0] : bytes[2 * i];
+        final imagByte = i == 0 ? 0 : bytes[(2 * i) + 1];
 
         final real = _signedByteValue(realByte);
         final imag = _signedByteValue(imagByte);
@@ -223,7 +250,7 @@ class AudifyController {
         // This is intentional for music visualization to show all frequency content
         final enhanced = math.pow(normalized, 0.6).toDouble();
 
-        magnitudes.add(enhanced);
+        magnitudes[i] = enhanced;
       }
 
       _fftStreamController.add(magnitudes);
@@ -315,6 +342,16 @@ class AudifyController {
 
   static int _positiveOrDefault(int? value, int fallback) {
     return value != null && value > 0 ? value : fallback;
+  }
+
+  static void _validateCaptureSize(int captureSize) {
+    if (captureSize <= 0) {
+      throw ArgumentError.value(
+        captureSize,
+        'captureSize',
+        'Must be greater than zero.',
+      );
+    }
   }
 
   static int _unsignedByteValue(int byte) => byte & 0xFF;

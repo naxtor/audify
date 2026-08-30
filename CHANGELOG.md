@@ -1,3 +1,21 @@
+## 1.1.2
+
+**Summary:** Additive API, audio-data correctness, and native reliability update. No breaking changes.
+
+* **Runtime Capture Configuration:**
+  - Added `AudifyController.setCaptureSize(int captureSize)` for changing capture size while stopped.
+  - Validates capture-size changes across Dart, Android, and iOS, and keeps Dart frequency-band extraction aligned with the native size actually applied.
+
+* **FFT and Native Reliability:**
+  - Aligns Dart and iOS FFT handling with Android Visualizer's interleaved byte layout.
+  - Prevents stale iOS mixer taps when audio-engine startup fails.
+  - Reduces temporary Dart and iOS FFT buffer allocations during processing.
+
+* **Documentation and Verification:**
+  - Documents `waveformStream` custom-consumer usage and runtime capture-size changes in the README.
+  - Adds Android capture-size validation tests and an iOS manual verification checklist.
+  - Removes the completed project TODO document.
+
 ## 1.1.1
 
 **Summary:** Correctness and product-claim update for the Priority 1 fixes. No breaking API changes.

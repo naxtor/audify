@@ -2,7 +2,7 @@
 
 A high-performance audio visualizer plugin for Flutter with beautiful trap/dubstep style visualizations including circular spectrum and bar spectrum displays.
 
-[![Pub Version](https://img.shields.io/badge/pub-v1.1.1-blue)](https://pub.dev/packages/audify)
+[![Pub Version](https://img.shields.io/badge/pub-v1.1.2-blue)](https://pub.dev/packages/audify)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 ![circular spectrum with image demo](https://raw.githubusercontent.com/naxtor/audify/main/assets/gifs/ezgif-875108c491fd79d4.gif)
@@ -46,7 +46,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  audify: ^1.1.1
+  audify: ^1.1.2
   permission_handler: ^11.0.1  # For runtime permissions
 ```
 
@@ -290,6 +290,21 @@ _controller.fftStream.listen((List<double> fft) {
 });
 ```
 
+### Using Waveform Data
+
+```dart
+// Samples are normalized from -1.0 to 1.0 and can be drawn by a
+// CustomPainter or passed to another waveform widget.
+final waveformSubscription = _controller.waveformStream.listen((samples) {
+  if (samples.isEmpty) return;
+  final newestSample = samples.last;
+  // Update the state used by your custom waveform renderer.
+});
+
+// Cancel the subscription when the owning widget or service is disposed.
+await waveformSubscription.cancel();
+```
+
 ### Custom Audio Session (Android)
 
 ```dart
@@ -298,6 +313,17 @@ _controller.fftStream.listen((List<double> fft) {
 final audioSessionId = audioPlayer.audioSessionId;
 
 await _controller.initialize(audioSessionId: audioSessionId);
+```
+
+### Change Capture Size at Runtime
+
+Stop capture before changing the size, then start it again. Android may clamp
+the requested value to a supported power of two.
+
+```dart
+await _controller.stopCapture();
+await _controller.setCaptureSize(1024);
+await _controller.startCapture();
 ```
 
 ## Frequency Bands
@@ -338,6 +364,7 @@ AudifyController({
 | `initialize()` | `audioSessionId`, `captureSize` | Initialize the visualizer |
 | `startCapture()` | - | Start capturing audio data |
 | `stopCapture()` | - | Stop capturing audio data |
+| `setCaptureSize()` | `captureSize` | Change capture size while stopped |
 | `dispose()` | - | Release all resources |
 
 #### Properties

@@ -18,17 +18,20 @@ class MockAudifyPlatform implements AudifyPlatform {
   bool shouldThrowOnInitialize = false;
   bool shouldThrowOnStartCapture = false;
   bool shouldThrowOnStopCapture = false;
+  bool shouldThrowOnSetCaptureSize = false;
 
   // Test inspection: track method calls
   int initializeCallCount = 0;
   int startCaptureCallCount = 0;
   int stopCaptureCallCount = 0;
+  int setCaptureSizeCallCount = 0;
   int releaseCallCount = 0;
 
   int? lastAudioSessionId;
   int? lastCaptureSize;
   int? sampleRate;
   int? actualCaptureSize;
+  int? actualSetCaptureSize;
 
   @override
   Future<AudifyInitializationResult> initialize(
@@ -75,6 +78,24 @@ class MockAudifyPlatform implements AudifyPlatform {
 
     stopCaptureCallCount++;
     _isCapturing = false;
+  }
+
+  @override
+  Future<int> setCaptureSize(int captureSize) async {
+    setCaptureSizeCallCount++;
+
+    if (shouldThrowOnSetCaptureSize) {
+      throw Exception('Mock set capture size error');
+    }
+    if (!_isInitialized) {
+      throw Exception('Platform not initialized');
+    }
+    if (_isCapturing) {
+      throw Exception('Platform is capturing');
+    }
+
+    lastCaptureSize = captureSize;
+    return actualSetCaptureSize ?? captureSize;
   }
 
   @override

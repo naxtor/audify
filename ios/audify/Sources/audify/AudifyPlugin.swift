@@ -55,10 +55,10 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
             )
         case "setCaptureSize":
             if let args = call.arguments as? [String: Any],
-               let size = args["size"] as? Int {
-                setCaptureSize(size: size, result: result)
+               let captureSize = (args["captureSize"] ?? args["size"]) as? Int {
+                setCaptureSize(captureSize: captureSize, result: result)
             } else {
-                result(FlutterError(code: "INVALID_ARGS", message: "size is required", details: nil))
+                result(FlutterError(code: "INVALID_ARGS", message: "captureSize is required", details: nil))
             }
         case "startCapture":
             startCapture(result: result)
@@ -73,6 +73,22 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     
     private func initialize(audioSessionId: Int, captureSize: Int, result: @escaping FlutterResult) {
         do {
+            guard !isCapturing else {
+                result(FlutterError(
+                    code: "CAPTURE_ACTIVE",
+                    message: "Stop capture before reinitializing the visualizer",
+                    details: nil
+                ))
+                return
+            }
+            guard captureSize > 0 else {
+                result(FlutterError(
+                    code: "INVALID_ARGS",
+                    message: "captureSize must be greater than zero",
+                    details: nil
+                ))
+                return
+            }
             self.captureSize = captureSize
             
             // Setup audio session
@@ -84,7 +100,7 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
             audioEngine = AVAudioEngine()
             
             // Setup FFT
-            setupFFT()
+            try setupFFT(captureSize: captureSize)
             
             result([
                 "sampleRate": Int(audioSession.sampleRate.rounded()),
@@ -95,19 +111,64 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
         }
     }
     
-    private func setupFFT() {
+    private func setupFFT(captureSize: Int) throws {
         // Create FFT setup for real-to-complex transform
-        fftSetup = vDSP_DFT_zrop_CreateSetup(nil, vDSP_Length(captureSize), vDSP_DFT_Direction.FORWARD)
-        
+        guard let newFftSetup = vDSP_DFT_zrop_CreateSetup(
+            nil,
+            vDSP_Length(captureSize),
+            vDSP_DFT_Direction.FORWARD
+        ) else {
+            throw NSError(
+                domain: "Audify",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Unable to create FFT resources"]
+            )
+        }
+
         // Create Hann window for FFT
-        window = [Float](repeating: 0, count: captureSize)
-        vDSP_hann_window(&window, vDSP_Length(captureSize), Int32(vDSP_HANN_NORM))
+        var newWindow = [Float](repeating: 0, count: captureSize)
+        vDSP_hann_window(&newWindow, vDSP_Length(captureSize), Int32(vDSP_HANN_NORM))
+
+        if let fftSetup = fftSetup {
+            vDSP_DFT_DestroySetup(fftSetup)
+        }
+        self.fftSetup = newFftSetup
+        window = newWindow
     }
     
-    private func setCaptureSize(size: Int, result: @escaping FlutterResult) {
-        captureSize = size
-        setupFFT()
-        result(true)
+    private func setCaptureSize(captureSize: Int, result: @escaping FlutterResult) {
+        guard audioEngine != nil else {
+            result(FlutterError(
+                code: "NOT_INITIALIZED",
+                message: "Initialize the visualizer before changing the capture size",
+                details: nil
+            ))
+            return
+        }
+        guard !isCapturing else {
+            result(FlutterError(
+                code: "CAPTURE_ACTIVE",
+                message: "Stop capture before changing the capture size",
+                details: nil
+            ))
+            return
+        }
+        guard captureSize > 0 else {
+            result(FlutterError(
+                code: "INVALID_ARGS",
+                message: "captureSize must be greater than zero",
+                details: nil
+            ))
+            return
+        }
+
+        do {
+            try setupFFT(captureSize: captureSize)
+            self.captureSize = captureSize
+            result(["captureSize": self.captureSize])
+        } catch {
+            result(FlutterError(code: "SET_SIZE_ERROR", message: error.localizedDescription, details: nil))
+        }
     }
     
     private func startCapture(result: @escaping FlutterResult) {
@@ -127,7 +188,7 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
             let format = outputNode.inputFormat(forBus: 0)
             
             // Install tap on main mixer to capture audio
-            mainMixer.installTap(onBus: 0, bufferSize: AVAudioFrameCount(captureSize), format: format) { [weak self] (buffer, time) in
+            mainMixer.installTap(onBus: 0, bufferSize: AVAudioFrameCount(captureSize), format: format) { [weak self] buffer, _ in
                 guard let self = self else { return }
                 self.processAudioBuffer(buffer: buffer)
             }
@@ -136,6 +197,9 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
             isCapturing = true
             result(true)
         } catch {
+            // `installTap` succeeds before `audioEngine.start` can fail. Remove
+            // it here so a later retry does not retain a stale tap.
+            audioEngine.mainMixerNode.removeTap(onBus: 0)
             result(FlutterError(code: "START_ERROR", message: error.localizedDescription, details: nil))
         }
     }
@@ -165,6 +229,7 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
         
         if let fftSetup = fftSetup {
             vDSP_DFT_DestroySetup(fftSetup)
+            self.fftSetup = nil
         }
         
         audioEngine = nil
@@ -204,46 +269,57 @@ public class AudifyPlugin: NSObject, FlutterPlugin {
     
     private func processFFT(samples: [Float]) {
         guard let fftSetup = fftSetup else { return }
-        
-        var processedSamples = samples.prefix(captureSize).map { $0 }
-        
-        // Pad if necessary
-        while processedSamples.count < captureSize {
-            processedSamples.append(0)
+
+        // The real DFT API packs the time-domain signal into separate vectors
+        // containing its even and odd samples. Apply the window while filling
+        // those vectors to avoid allocating intermediate sample buffers.
+        let halfCaptureSize = captureSize / 2
+        var inputReal = [Float](repeating: 0, count: halfCaptureSize)
+        var inputImaginary = [Float](repeating: 0, count: halfCaptureSize)
+        for i in 0..<halfCaptureSize {
+            let realIndex = i * 2
+            let imaginaryIndex = realIndex + 1
+
+            if realIndex < samples.count {
+                inputReal[i] = samples[realIndex] * window[realIndex]
+            }
+            if imaginaryIndex < samples.count {
+                inputImaginary[i] = samples[imaginaryIndex] * window[imaginaryIndex]
+            }
         }
+
+        var realPart = [Float](repeating: 0, count: halfCaptureSize)
+        var imagPart = [Float](repeating: 0, count: halfCaptureSize)
+
+        // Perform the real-to-complex transform.
+        vDSP_DFT_Execute(
+            fftSetup,
+            &inputReal,
+            &inputImaginary,
+            &realPart,
+            &imagPart
+        )
         
-        // Apply window
-        var windowedSamples = [Float](repeating: 0, count: captureSize)
-        vDSP_vmul(processedSamples, 1, window, 1, &windowedSamples, 1, vDSP_Length(captureSize))
-        
-        // Prepare complex buffer
-        var realPart = [Float](repeating: 0, count: captureSize / 2)
-        var imagPart = [Float](repeating: 0, count: captureSize / 2)
-        
-        // Split real input into even/odd indices for complex FFT
-        for i in 0..<captureSize / 2 {
-            realPart[i] = windowedSamples[2 * i]
-            imagPart[i] = windowedSamples[2 * i + 1]
-        }
-        
-        var complexBuffer = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
-        
-        // Perform FFT
-        vDSP_DFT_Execute(fftSetup, &windowedSamples, &complexBuffer.realp!, &complexBuffer.imagp!)
-        
-        // Convert to Android Visualizer FFT format: [real0, real1, ..., realN/2, imag1, ..., imagN/2-1]
+        // Convert to Android Visualizer FFT format:
+        // [real0, realNyquist, real1, imag1, real2, imag2, ...].
         var fftData = [UInt8](repeating: 0, count: captureSize)
-        
-        // Copy real parts
-        for i in 0..<captureSize / 2 {
-            let value = Int8(max(-128, min(127, realPart[i] * 127)))
-            fftData[i] = UInt8(bitPattern: value)
+        // vDSP's forward real DFT is unnormalized, so scale it back to a
+        // signed 8-bit visualization range before sending it to Dart.
+        let frequencyScale = 127.0 / Float(captureSize)
+        func fftByte(_ value: Float) -> UInt8 {
+            let scaledValue = value * frequencyScale
+            let byteValue = Int8(max(-128, min(127, scaledValue)))
+            return UInt8(bitPattern: byteValue)
         }
-        
-        // Copy imaginary parts (skip DC and Nyquist)
+
+        // The real-input DFT stores the Nyquist component in imagPart[0].
+        fftData[0] = fftByte(realPart[0])
+        fftData[1] = fftByte(imagPart[0])
+
+        // Copy interleaved real and imaginary parts for positive-frequency bins.
         for i in 1..<captureSize / 2 {
-            let value = Int8(max(-128, min(127, imagPart[i] * 127)))
-            fftData[captureSize / 2 + i - 1] = UInt8(bitPattern: value)
+            fftData[2 * i] = fftByte(realPart[i])
+            fftData[(2 * i) + 1] = fftByte(imagPart[i])
         }
         
         fftStreamHandler?.sendData(data: fftData)

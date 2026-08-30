@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,7 +12,8 @@ List<int> _fftDataWithRealBin({
   int bin = 4,
   int value = 127,
 }) {
-  return List<int>.filled(byteLength, 0)..[bin] = value;
+  final byteIndex = bin == 0 ? 0 : bin * 2;
+  return List<int>.filled(byteLength, 0)..[byteIndex] = value;
 }
 
 void main() {
@@ -63,6 +65,65 @@ void main() {
     test('initialize can be called with different session IDs', () async {
       await controller.initialize(audioSessionId: 100);
       expect(mockPlatform.lastAudioSessionId, 100);
+    });
+
+    test('initialize rejects a non-positive capture size', () async {
+      expect(
+        () => controller.initialize(captureSize: 0),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('setCaptureSize requires initialization', () async {
+      expect(
+        () => controller.setCaptureSize(1024),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('setCaptureSize updates the size used for frequency bands', () async {
+      mockPlatform.actualSetCaptureSize = 4800;
+      await controller.initialize(audioSessionId: 0, captureSize: 2048);
+      await controller.setCaptureSize(4096);
+      await controller.startCapture();
+
+      final streamFuture = controller.frequencyDataStream.first;
+      mockPlatform.emitFftData(_fftDataWithRealBin());
+
+      final result = await streamFuture;
+      expect(mockPlatform.lastCaptureSize, 4096);
+      expect(mockPlatform.setCaptureSizeCallCount, 1);
+      expect(result.subBass, greaterThan(result.bass));
+    });
+
+    test('setCaptureSize rejects non-positive values', () async {
+      await controller.initialize(audioSessionId: 0);
+
+      expect(
+        () => controller.setCaptureSize(0),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('setCaptureSize requires capture to be stopped', () async {
+      await controller.initialize(audioSessionId: 0);
+      await controller.startCapture();
+
+      expect(
+        () => controller.setCaptureSize(1024),
+        throwsA(isA<StateError>()),
+      );
+      expect(mockPlatform.setCaptureSizeCallCount, 0);
+    });
+
+    test('setCaptureSize wraps platform errors', () async {
+      await controller.initialize(audioSessionId: 0);
+      mockPlatform.shouldThrowOnSetCaptureSize = true;
+
+      expect(
+        () => controller.setCaptureSize(1024),
+        throwsA(isA<Exception>()),
+      );
     });
   });
 
@@ -131,12 +192,14 @@ void main() {
       await controller.initialize(audioSessionId: 0);
       await controller.startCapture();
 
-      // Simulate Android Visualizer FFT format
-      // Format: [real0, real1, ..., realN/2, imag1, ..., imagN/2-1]
-      final mockFftData = List<int>.generate(256, (i) {
-        if (i < 128) return i % 128; // Real parts
-        return (i - 128) % 128; // Imaginary parts
-      });
+      // Simulate Android Visualizer FFT format.
+      // Format: [real0, realNyquist, real1, imag1, real2, imag2, ...]
+      final mockFftData = List<int>.filled(256, 0);
+      mockFftData[0] = 127; // DC real value.
+      for (int bin = 1; bin < 128; bin++) {
+        mockFftData[bin * 2] = bin; // Real component.
+        mockFftData[(bin * 2) + 1] = 127 - bin; // Imaginary component.
+      }
 
       final streamFuture = controller.fftStream.first;
       mockPlatform.emitFftData(mockFftData);
@@ -346,15 +409,13 @@ void main() {
       await controller.startCapture();
 
       // Create FFT data with both positive and negative signed values
-      final mockFftData = List<int>.generate(256, (i) {
-        if (i < 128) {
-          // Real parts: simulate signed bytes (some >128 to test conversion)
-          return (i * 2) % 256;
-        } else {
-          // Imaginary parts
-          return ((i - 128) * 3) % 256;
-        }
-      });
+      final mockFftData = List<int>.filled(256, 0);
+      mockFftData[0] = 255; // Signed -1 DC value.
+      for (int bin = 1; bin < 128; bin++) {
+        // Some values exceed 127 to exercise signed byte conversion.
+        mockFftData[bin * 2] = (bin * 2) % 256;
+        mockFftData[(bin * 2) + 1] = (bin * 3) % 256;
+      }
 
       final streamFuture = controller.fftStream.first;
       mockPlatform.emitFftData(mockFftData);
@@ -365,6 +426,28 @@ void main() {
       expect(result.every((v) => v >= 0.0 && v <= 1.0), true);
       expect(result.length, 128);
     });
+
+    test(
+      'uses Android Visualizer interleaved real and imaginary bins',
+      () async {
+        await controller.initialize(audioSessionId: 0);
+        await controller.startCapture();
+
+        // DC is 127. The first positive-frequency bin has real=3 and imag=4,
+        // so its magnitude is 5. The second has real=0 and imag=-128.
+        final streamFuture = controller.fftStream.first;
+        mockPlatform.emitFftData([127, 0, 3, 4, 0, 128, 0, 0]);
+
+        final result = await streamFuture;
+        double expectedMagnitude(double magnitude) =>
+            math.pow((magnitude / 181.02).clamp(0.0, 1.0), 0.6).toDouble();
+
+        expect(result, hasLength(4));
+        expect(result[0], closeTo(expectedMagnitude(127), 0.000001));
+        expect(result[1], closeTo(expectedMagnitude(5), 0.000001));
+        expect(result[2], closeTo(expectedMagnitude(128), 0.000001));
+      },
+    );
 
     test('uses default sample rate for frequency bands', () async {
       await controller.initialize(audioSessionId: 0, captureSize: 4800);

@@ -4,6 +4,8 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import org.mockito.Mockito
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 /*
  * This demonstrates a simple unit test of the Kotlin portion of this plugin's implementation.
@@ -15,7 +17,7 @@ import kotlin.test.Test
 
 internal class AudifyPluginTest {
     @Test
-    fun onMethodCall_getPlatformVersion_returnsExpectedValue() {
+    fun onMethodCall_unknownMethod_reportsNotImplemented() {
         val plugin = AudifyPlugin()
 
         val call = MethodCall("getPlatformVersion", null)
@@ -23,5 +25,22 @@ internal class AudifyPluginTest {
         plugin.onMethodCall(call, mockResult)
 
         Mockito.verify(mockResult).notImplemented()
+    }
+
+    @Test
+    fun normalizeCaptureSize_clampsAndRoundsDownToAPowerOfTwo() {
+        assertEquals(128, AudifyPlugin.normalizeCaptureSize(32, 128, 1024))
+        assertEquals(512, AudifyPlugin.normalizeCaptureSize(900, 128, 1024))
+        assertEquals(1024, AudifyPlugin.normalizeCaptureSize(4096, 128, 1024))
+    }
+
+    @Test
+    fun normalizeCaptureSize_rejectsInvalidRequestsAndRanges() {
+        assertFailsWith<IllegalArgumentException> {
+            AudifyPlugin.normalizeCaptureSize(0, 128, 1024)
+        }
+        assertFailsWith<IllegalArgumentException> {
+            AudifyPlugin.normalizeCaptureSize(256, 1024, 128)
+        }
     }
 }

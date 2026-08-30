@@ -50,8 +50,13 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
                 release(result)
             }
             "setCaptureSize" -> {
-                val size = call.argument<Int>("size") ?: 1024
-                setCaptureSize(size, result)
+                val captureSize = call.argument<Int>("captureSize")
+                    ?: call.argument<Int>("size")
+                if (captureSize == null) {
+                    result.error("INVALID_ARGS", "captureSize is required", null)
+                } else {
+                    setCaptureSize(captureSize, result)
+                }
             }
             else -> {
                 result.notImplemented()
@@ -65,18 +70,12 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
             visualizer = Visualizer(audioSessionId)
             
             visualizer?.apply {
-                // Get valid capture size range
                 val captureSizeRange = Visualizer.getCaptureSizeRange()
-                val minSize = captureSizeRange[0]
-                val maxSize = captureSizeRange[1]
-                
-                // Ensure requested size is within valid range and is a power of 2
-                var validSize = captureSize
-                if (validSize < minSize) validSize = minSize
-                if (validSize > maxSize) validSize = maxSize
-                
-                // Round to nearest power of 2
-                validSize = Integer.highestOneBit(validSize)
+                val validSize = normalizeCaptureSize(
+                    captureSize,
+                    captureSizeRange[0],
+                    captureSizeRange[1]
+                )
                 
                 // CRITICAL: Set capture size BEFORE setting up data capture listener
                 // This is required on Android API 36+
@@ -123,12 +122,18 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
 
     private fun startCapture(result: Result) {
         try {
-            if (visualizer?.enabled == true) {
+            val activeVisualizer = visualizer
+            if (activeVisualizer == null) {
+                result.error("NOT_INITIALIZED", "Visualizer is not initialized", null)
+                return
+            }
+
+            if (activeVisualizer.enabled) {
                 result.success(true)
                 return
             }
 
-            visualizer?.enabled = true
+            activeVisualizer.enabled = true
             result.success(true)
         } catch (e: Exception) {
             result.error("START_ERROR", e.message, null)
@@ -161,10 +166,49 @@ class AudifyPlugin: FlutterPlugin, MethodCallHandler {
 
     private fun setCaptureSize(size: Int, result: Result) {
         try {
-            visualizer?.captureSize = size
-            result.success(true)
+            val activeVisualizer = visualizer
+            if (activeVisualizer == null) {
+                result.error("NOT_INITIALIZED", "Visualizer is not initialized", null)
+                return
+            }
+            if (activeVisualizer.enabled) {
+                result.error(
+                    "CAPTURE_ACTIVE",
+                    "Stop capture before changing the capture size",
+                    null
+                )
+                return
+            }
+
+            val captureSizeRange = Visualizer.getCaptureSizeRange()
+            val validSize = normalizeCaptureSize(
+                size,
+                captureSizeRange[0],
+                captureSizeRange[1]
+            )
+            activeVisualizer.captureSize = validSize
+            result.success(mapOf("captureSize" to validSize))
         } catch (e: Exception) {
             result.error("SET_SIZE_ERROR", e.message, null)
+        }
+    }
+
+    companion object {
+        /**
+         * Returns a Visualizer-compatible capture size by clamping the request
+         * to the platform range and rounding down to a power of two.
+         */
+        internal fun normalizeCaptureSize(
+            requestedSize: Int,
+            minimumSize: Int,
+            maximumSize: Int
+        ): Int {
+            require(requestedSize > 0) { "captureSize must be greater than zero" }
+            require(minimumSize > 0 && maximumSize >= minimumSize) {
+                "Invalid Visualizer capture size range"
+            }
+
+            return Integer.highestOneBit(requestedSize.coerceIn(minimumSize, maximumSize))
         }
     }
 

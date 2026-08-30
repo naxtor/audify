@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'audify'
-  s.version          = '1.1.1'
+  s.version          = '1.1.2'
   s.summary          = 'High-performance audio visualizer for Flutter with trap/dubstep style visualizations.'
   s.description      = <<-DESC
 High-performance audio visualizer package for Flutter focusing on trap/dubstep style visualizations. 

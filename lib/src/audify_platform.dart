@@ -13,6 +13,10 @@ abstract class AudifyPlatform {
   );
   Future<void> startCapture();
   Future<void> stopCapture();
+  /// Changes the native capture size and returns the size actually applied.
+  ///
+  /// Call this only after initialization and while capture is stopped.
+  Future<int> setCaptureSize(int captureSize);
   Future<void> release();
 
   /// Streams raw bytes from the platform FFT event channel.
@@ -69,6 +73,27 @@ class MethodChannelAudify implements AudifyPlatform {
   @override
   Future<void> stopCapture() async {
     await _methodChannel.invokeMethod('stopCapture');
+  }
+
+  @override
+  Future<int> setCaptureSize(int captureSize) async {
+    final result = await _methodChannel.invokeMethod<dynamic>(
+      'setCaptureSize',
+      {'captureSize': captureSize},
+    );
+
+    if (result is Map) {
+      final actualCaptureSize = result['captureSize'];
+      if (actualCaptureSize is int && actualCaptureSize > 0) {
+        return actualCaptureSize;
+      }
+    }
+
+    if (result is int && result > 0) {
+      return result;
+    }
+
+    throw StateError('Platform did not return a valid capture size.');
   }
 
   @override
